@@ -10,11 +10,14 @@ class simPCR:
     def create_true_UMIs(self, output_filename='true_UMIs.csv'):
         # Generate random nucleotide sequences
         nucleotides = ['A', 'C', 'G', 'T']
-        sequences = []
+        sequences = set()  # Use a set to ensure uniqueness
 
-        for _ in range(self.number_of_rows):
+        while len(sequences) < self.number_of_rows:
             sequence = ''.join(random.choices(nucleotides, k=self.length))
-            sequences.append([sequence])
+            sequences.add(sequence)  # Add sequence to the set
+
+        # Convert the set to a list for DataFrame creation
+        sequences = list(sequences)
 
         # Assign random genetic loci between 1 and 8 to each sequence
         genetic_loci = [random.randint(1, 8) for _ in range(self.number_of_rows)]
