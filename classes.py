@@ -168,3 +168,52 @@ class simPCR:
             print(f"Number of unique Molecule numbers: {unique_molecule_numbers}")
         else:
             print("Error: True UMIs have not been created yet.")
+
+
+import pandas as pd
+
+import pandas as pd
+
+
+class Denoiser:
+    def __init__(self, csv_file=None):
+        if csv_file:
+            self.df = pd.read_csv(csv_file)  # Load DataFrame from CSV if provided
+        else:
+            self.df = None  # Initialize an empty DataFrame
+
+    def simple(self, threshold):
+        if self.df is None:
+            print("Error: DataFrame is not initialized. Please provide a CSV file.")
+            return None
+
+        # Count appearances of each sequence
+        sequence_counts = self.df['Nucleotide Sequence'].value_counts()
+
+        # Fetch all sequences that appear 'threshold' times or more
+        valid_sequences = sequence_counts[sequence_counts >= threshold].index
+
+        # Filter the DataFrame to keep only rows with valid sequences
+        filtered_df = self.df[self.df['Nucleotide Sequence'].isin(valid_sequences)]
+
+        # Collapse rows into one per unique molecule, aggregating the other columns
+        collapsed_df = filtered_df.groupby(['Molecule']).agg({
+            'Nucleotide Sequence': 'first',  # Choose the first occurrence
+            'Genetic Loci': 'first',  # Choose the first occurrence
+            'Type': 'first'  # Choose the first occurrence
+        }).reset_index()
+
+        # Output the collapsed DataFrame to 'simple_denoiser_result_enhanced.csv'
+        collapsed_df.to_csv('simple_denoiser_result_enhanced.csv', index=False)
+        print(f"Enhanced results saved to 'simple_denoiser_result_enhanced.csv' with {len(collapsed_df)} rows.")
+
+        # Create another DataFrame for the simple result with a new 'Molecule' column
+        simple_result_df = collapsed_df.copy()
+        simple_result_df['Molecule'] = range(1, len(simple_result_df) + 1)  # Generate new molecule numbers
+
+        # Output the simple result to 'simple_denoiser_result.csv'
+        simple_result_df[['Molecule', 'Nucleotide Sequence', 'Genetic Loci']].to_csv('simple_denoiser_result.csv',
+                                                                                     index=False)
+        print(f"Simple results saved to 'simple_denoiser_result.csv' with {len(simple_result_df)} rows.")
+
+        return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
