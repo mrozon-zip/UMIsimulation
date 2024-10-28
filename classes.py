@@ -1,5 +1,7 @@
 import pandas as pd
 import random
+from polyleven import levenshtein
+
 
 class simPCR:
     def __init__(self, length, number_of_rows):
@@ -33,14 +35,21 @@ class simPCR:
         # Assign molecule numbers from 1 to the number_of_rows to each sequence
         self.df['Molecule'] = range(1, self.number_of_rows + 1)
 
+        # Initialize the 'root', 'Type', and 'Edit Distance' columns
+        self.df['root'] = self.df['Molecule'].astype(str)  # Copy Molecule to root
+        self.df['Type'] = 'original'  # All initial sequences are original
+        self.df['Edit Distance'] = 0  # Initialize the Edit Distance column
+
         # Reorder the columns to match the desired output
-        self.df = self.df[['Molecule', 'Nucleotide Sequence', 'Genetic Loci']]
+        self.df = self.df[['root', 'Molecule', 'Nucleotide Sequence', 'Genetic Loci', 'Type', 'Edit Distance']]
 
         # Output the resulting DataFrame to a CSV file
         self.df.to_csv(output_filename, index=False)
-        print(f"File '{output_filename}' has been created with {self.number_of_rows} unique rows and sequence length of {self.length}.")
+        print(
+            f"File '{output_filename}' has been created with {self.number_of_rows} unique rows and sequence length of {self.length}.")
 
-    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles, output_filename='amplified_UMIs.csv'):
+    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles,
+                            output_filename='amplified_UMIs.csv'):
         if self.df is None:
             print("Error: True UMIs have not been created yet.")
             return
@@ -91,6 +100,8 @@ class simPCR:
             for index, row in self.df.iterrows():
                 sequence = row['Nucleotide Sequence']
                 molecule_number = row['Molecule']
+                type_value = row['Type']
+                root_value = row['root']  # Get the root value
 
                 # Append the original row (no changes)
                 amplified_rows.append(row)
@@ -103,13 +114,37 @@ class simPCR:
                     mutated_sequence = random_errors(sequence, error_rate, error_types)
                     row_copy['Nucleotide Sequence'] = mutated_sequence
 
-                    # Check if the sequence was actually mutated and assign a unique molecule number if it was
+                    # Change the 'root' value for the amplified row
+                    row_copy['root'] = f"{root_value}a"  # Add 'a' to the root value
+
+                    # Check if the sequence was actually mutated
                     if mutated_sequence != sequence:
-                        row_copy['Molecule'] = next_molecule_number
+                        # Assign error type and compute new edit distance
+                        error_number = int(type_value[5:]) + 1 if type_value.startswith('error') else 1
+                        row_copy['Type'] = f'error{error_number}'
+
+                        # Calculate new edit distance: existing + distance from original to mutated
+                        edit_distance = levenshtein(sequence, mutated_sequence)
+                        row_copy['Edit Distance'] = edit_distance
+                        row_copy['Molecule'] = next_molecule_number  # Update molecule number
                         next_molecule_number += 1  # Ensure the next unique number is used
+                    else:
+                        # If no error occurs during amplification, retain existing distance
+                        row_copy['Type'] = type_value  # Maintain original type
+                        row_copy['Edit Distance'] = 0  # No error, so distance is 0
 
                     # Add the modified row (amplified and possibly mutated)
                     amplified_rows.append(row_copy)
+
+            # At the end of each cycle, calculate edit distance for all rows
+            for amplified_row in amplified_rows:
+                root_stripped = amplified_row['root'].rstrip('a')  # Strip the 'a' for comparison
+                corresponding_row = self.df[self.df['root'] == root_stripped]
+
+                if not corresponding_row.empty:
+                    corresponding_sequence = corresponding_row.iloc[0]['Nucleotide Sequence']
+                    edit_distance = levenshtein(amplified_row['Nucleotide Sequence'], corresponding_sequence)
+                    amplified_row['Edit Distance'] = edit_distance
 
             # Update the DataFrame for the next cycle
             self.df = pd.DataFrame(amplified_rows, columns=self.df.columns)
