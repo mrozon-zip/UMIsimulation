@@ -30,46 +30,67 @@ class simPCR:
         self.df.sort_values(by='Genetic Loci', inplace=True)
         self.df.reset_index(drop=True, inplace=True)
 
-        # Assign order numbers from 1 to the number_of_rows to each sequence
-        self.df['Order Number'] = range(1, self.number_of_rows + 1)
+        # Assign molecule numbers from 1 to the number_of_rows to each sequence
+        self.df['Molecule'] = range(1, self.number_of_rows + 1)
 
         # Reorder the columns to match the desired output
-        self.df = self.df[['Order Number', 'Nucleotide Sequence', 'Genetic Loci']]
+        self.df = self.df[['Molecule', 'Nucleotide Sequence', 'Genetic Loci']]
 
         # Output the resulting DataFrame to a CSV file
         self.df.to_csv(output_filename, index=False)
-        print(f"File '{output_filename}' has been created with {self.number_of_rows} rows and sequence length of {self.length}.")
+        print(f"File '{output_filename}' has been created with {self.number_of_rows} unique rows and sequence length of {self.length}.")
 
-    def amplify_with_errors(self, amplification_probability, error_rate, amplification_cycles, output_filename='amplified_UMIs.csv'):
+    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles, output_filename='amplified_UMIs.csv'):
         if self.df is None:
             print("Error: True UMIs have not been created yet.")
             return
 
-        def random_errors_polymerase(sequence, error_rate):
+        def random_errors(sequence, error_rate, error_types):
             nucleotides = ['A', 'C', 'G', 'T']
             sequence_list = list(sequence)
+            i = 0
 
-            for i, nucleotide in enumerate(sequence_list):
+            while i < len(sequence_list):
                 if random.random() < error_rate:  # Introduce an error
-                    possible_mutations = [n for n in nucleotides if n != nucleotide]
-                    sequence_list[i] = random.choice(possible_mutations)
+                    error_type_choice = random.choices(
+                        ['substitution', 'deletion', 'insertion'],
+                        weights=[error_types['substitution'], error_types['deletion'], error_types['insertion']],
+                        k=1
+                    )[0]
+
+                    if error_type_choice == 'substitution':
+                        possible_mutations = [n for n in nucleotides if n != sequence_list[i]]
+                        sequence_list[i] = random.choice(possible_mutations)
+                        i += 1  # Move to the next nucleotide
+
+                    elif error_type_choice == 'deletion':
+                        del sequence_list[i]  # Remove the current nucleotide
+                        # Note: Do not increment `i` to check the next nucleotide in place of the deleted one
+
+                    elif error_type_choice == 'insertion':
+                        new_nucleotide = random.choice(nucleotides)
+                        sequence_list.insert(i + 1, new_nucleotide)  # Insert after the current nucleotide
+                        i += 2  # Skip the newly inserted nucleotide and move to the next nucleotide
+
+                else:
+                    i += 1  # Move to the next nucleotide if no error occurs
 
             return ''.join(sequence_list)
 
-        def get_next_order_number(df):
-            """Find the next available unique order number, incremental to the highest existing number."""
-            max_order_number = df['Order Number'].max()
-            return max_order_number + 1
+        def get_next_molecule_number(df):
+            """Find the next available unique molecule number, incremental to the highest existing number."""
+            max_molecule_number = df['Molecule'].max()
+            return max_molecule_number + 1
 
         # Perform amplification for the specified number of cycles
         for cycle in range(amplification_cycles):
             amplified_rows = []
-            next_order_number = get_next_order_number(self.df)
+            next_molecule_number = get_next_molecule_number(self.df)
 
             # Iterate through each row and check for amplification and errors
             for index, row in self.df.iterrows():
                 sequence = row['Nucleotide Sequence']
-                order_number = row['Order Number']
+                molecule_number = row['Molecule']
 
                 # Append the original row (no changes)
                 amplified_rows.append(row)
@@ -79,13 +100,13 @@ class simPCR:
                     row_copy = row.copy()
 
                     # Apply polymerase errors with a probability
-                    mutated_sequence = random_errors_polymerase(sequence, error_rate)
+                    mutated_sequence = random_errors(sequence, error_rate, error_types)
                     row_copy['Nucleotide Sequence'] = mutated_sequence
 
-                    # Check if the sequence was actually mutated and assign a unique order number if it was
+                    # Check if the sequence was actually mutated and assign a unique molecule number if it was
                     if mutated_sequence != sequence:
-                        row_copy['Order Number'] = next_order_number
-                        next_order_number += 1  # Ensure the next unique number is used
+                        row_copy['Molecule'] = next_molecule_number
+                        next_molecule_number += 1  # Ensure the next unique number is used
 
                     # Add the modified row (amplified and possibly mutated)
                     amplified_rows.append(row_copy)
@@ -98,7 +119,7 @@ class simPCR:
         self.df.to_csv(output_filename, index=False)
         print(f"File '{output_filename}' has been created with {len(self.df)} rows.")
 
-    def true_umis_analyze(self):
+    def true_UMIs_analyze(self):
         if self.df is not None:
             loci_counts = self.df['Genetic Loci'].value_counts()
             print("Counts of rows with the same Genetic Loci:")
@@ -106,9 +127,9 @@ class simPCR:
         else:
             print("Error: True UMIs have not been created yet.")
 
-    def pcr_analyze(self):
+    def PCR_analyze(self):
         if self.df is not None:
-            unique_order_numbers = self.df['Order Number'].nunique()
-            print(f"Number of unique Order Numbers: {unique_order_numbers}")
+            unique_molecule_numbers = self.df['Molecule'].nunique()
+            print(f"Number of unique Molecule numbers: {unique_molecule_numbers}")
         else:
             print("Error: True UMIs have not been created yet.")
