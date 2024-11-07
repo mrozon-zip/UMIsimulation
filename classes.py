@@ -1,6 +1,8 @@
 import pandas as pd
 import random
 from polyleven import levenshtein
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 class simPCR:
@@ -170,11 +172,6 @@ class simPCR:
             print("Error: True UMIs have not been created yet.")
 
 
-import pandas as pd
-
-import pandas as pd
-
-
 class Denoiser:
     def __init__(self, csv_file=None):
         if csv_file:
@@ -200,7 +197,8 @@ class Denoiser:
         collapsed_df = filtered_df.groupby(['Molecule']).agg({
             'Nucleotide Sequence': 'first',  # Choose the first occurrence
             'Genetic Loci': 'first',  # Choose the first occurrence
-            'Type': 'first'  # Choose the first occurrence
+            'Type': 'first',  # Choose the first occurrence
+            'Edit Distance': 'first'
         }).reset_index()
 
         # Output the collapsed DataFrame to 'simple_denoiser_result_enhanced.csv'
@@ -217,3 +215,134 @@ class Denoiser:
         print(f"Simple results saved to 'simple_denoiser_result.csv' with {len(simple_result_df)} rows.")
 
         return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
+
+    def directional(self):
+        if self.df is None or self.df.empty:
+            print("Error: DataFrame is not initialized or is empty. Please provide a valid CSV file.")
+            return None
+
+        # Count occurrences of each Molecule
+        count_df = self.df['Molecule'].value_counts().reset_index()
+        count_df.columns = ['Molecule', 'amount']
+
+        # Merge the count back into the original DataFrame
+        merged_df = pd.merge(self.df, count_df, on='Molecule')
+
+        # Keep only the first occurrence of each Molecule
+        result_df = merged_df.drop_duplicates(subset=['Molecule'])
+
+        # Create a single network for all genetic loci
+        combined_graph = nx.DiGraph()
+        networks = {}
+
+        # Add nodes and edges for individual networks and the combined network
+        for loci, group in result_df.groupby('Genetic Loci'):
+            G = nx.DiGraph()  # Individual graph for each loci
+
+            # Add nodes with unique identifiers and format labels
+            for index, row in group.iterrows():
+                label = f"{row['Nucleotide Sequence']}, {row['amount']}"
+                node_id = f"{loci}_{index}"
+                G.add_node(node_id, label=label, value=row['amount'], sequence=row['Nucleotide Sequence'])
+                combined_graph.add_node(node_id, label=label, value=row['amount'], sequence=row['Nucleotide Sequence'])
+
+            # Create connections based on the specified conditions
+            for i, row_a in group.iterrows():
+                for j, row_b in group.iterrows():
+                    if i != j:  # Prevent self-connections
+                        value_a = row_a['amount']
+                        value_b = row_b['amount']
+
+                        # Condition: Check value condition
+                        if value_a >= 2 * value_b - 1:
+                            # Check edit distance condition
+                            edit_distance = levenshtein(row_a['Nucleotide Sequence'], row_b['Nucleotide Sequence'])
+                            if edit_distance == 1:
+                                G.add_edge(f"{loci}_{i}", f"{loci}_{j}")  # Connect from node a to node b
+                                combined_graph.add_edge(f"{loci}_{i}", f"{loci}_{j}")  # Add to combined graph
+
+            # Store the individual network for each genetic loci
+            networks[loci] = G
+
+        # Count separate networks (strongly connected components) in the combined graph
+        num_networks = nx.number_strongly_connected_components(combined_graph)
+        print(f"Number of different networks in the combined graph: {num_networks}")
+
+        return networks, combined_graph
+
+    def save_central_nodes(self, networks, filename='central_nodes.csv'):
+        central_nodes_data = []
+
+        for loci, graph in networks.items():
+            # Identify strongly connected components
+            for component in nx.strongly_connected_components(graph):
+                subgraph = graph.subgraph(component)
+                # Identify the central node (the node with the maximum 'amount' in this subgraph)
+                central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['value'])
+                only_once = True
+                while only_once is True:
+                    print(f"I am printing central node {central_node}")
+                    only_once = False
+                central_node_id = central_node[0]
+                central_node_amount = central_node[1]['value']
+
+                # Sum amounts of all nodes connected to the central node
+                total_amount = central_node_amount  # Start with the central node's amount
+                connected_nodes = nx.descendants(subgraph, central_node_id)  # Get all connected nodes
+
+                # Add the amount of each connected node
+                for node in connected_nodes:
+                    total_amount += subgraph.nodes[node]['value']
+
+                # Append the result
+                central_nodes_data.append({
+                    'Central Node': central_node_id,
+                    'Central Amount': central_node_amount,
+                    'Total Amount': total_amount
+                })
+
+        # Create a DataFrame from the collected data
+        central_nodes_df = pd.DataFrame(central_nodes_data)
+
+        # Save to CSV
+        central_nodes_df.to_csv(filename, index=False)
+        print(f"Central nodes saved to {filename}")
+
+        return central_nodes_data  # Return for visualization purposes
+
+    def visualize_individual_networks(self, networks):
+        for loci, graph in networks.items():
+            # Prepare to get the central node for coloring
+            central_node_id = None
+            # Identify central node
+            for component in nx.strongly_connected_components(graph):
+                subgraph = graph.subgraph(component)
+                central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['value'])
+                central_node_id = central_node[0]  # Get the central node ID
+                break  # Only need one central node per individual network
+
+            plt.figure(figsize=(12, 8))
+            pos = nx.spring_layout(graph)  # positions for all nodes
+            labels = nx.get_node_attributes(graph, 'label')
+
+            # Set colors: red for the central node, light blue for others
+            node_colors = ['red' if node == central_node_id else 'lightblue' for node in graph.nodes()]
+
+            nx.draw(graph, pos, with_labels=True, labels=labels, node_color=node_colors, node_size=2000, font_size=10, font_color='black', arrows=True)
+            plt.title(f'Network for {loci}')
+            plt.show()
+
+    def visualize_combined_network(self, graph, central_nodes_data):
+        plt.figure(figsize=(12, 8))
+        pos = nx.spring_layout(graph)  # positions for all nodes
+        labels = nx.get_node_attributes(graph, 'label')  # Get the labels from node attributes
+
+        # Create a set of central node IDs for coloring
+        central_node_ids = {data['Central Node'] for data in central_nodes_data}
+
+        # Set colors: red for central nodes, light blue for others
+        node_colors = ['red' if node in central_node_ids else 'lightblue' for node in graph.nodes()]
+
+        nx.draw(graph, pos, with_labels=True, labels=labels, node_color=node_colors, node_size=2000, font_size=10, font_color='black', arrows=True)
+        plt.title('Combined Network for All Genetic Loci')
+        plt.show()
