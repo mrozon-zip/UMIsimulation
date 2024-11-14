@@ -216,9 +216,10 @@ class Denoiser:
 
         return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
 
-    def directional(self):
-        if self.df is None or self.df.empty:
-            print("Error: DataFrame is not initialized or is empty. Please provide a valid CSV file.")
+    def directional_networks(self):
+        """Creates a dictionary of network graphs for each genetic loci."""
+        if self.df is None:
+            print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
 
         # Count occurrences of each Molecule
@@ -230,119 +231,128 @@ class Denoiser:
 
         # Keep only the first occurrence of each Molecule
         result_df = merged_df.drop_duplicates(subset=['Molecule'])
+        print(f"Number of unique molecules before denoising: {len(result_df)}")
+        unique_molecules = len(result_df)
 
-        # Create a single network for all genetic loci
-        combined_graph = nx.DiGraph()
-        networks = {}
+        # Initialize dictionaries
+        graphs = {}
+        networks_count = 0
+        joint_graph = nx.Graph()
 
-        # Add nodes and edges for individual networks and the combined network
+        # Loop through each genetic loci group
         for loci, group in result_df.groupby('Genetic Loci'):
-            G = nx.DiGraph()  # Individual graph for each loci
+            g = f"G_{loci}"
+            graphs[g] = nx.Graph()  # Create a new graph for each loci
 
-            # Add nodes with unique identifiers and format labels
-            for index, row in group.iterrows():
-                label = f"{row['Nucleotide Sequence']}, {row['amount']}"
-                node_id = f"{loci}_{index}"
-                G.add_node(node_id, label=label, value=row['amount'], sequence=row['Nucleotide Sequence'])
-                combined_graph.add_node(node_id, label=label, value=row['amount'], sequence=row['Nucleotide Sequence'])
-
-            # Create connections based on the specified conditions
+            # Add nodes and edges based on conditions
             for i, row_a in group.iterrows():
+                graphs[g].add_node(f"{i}",
+                                   sequence=row_a['Nucleotide Sequence'],
+                                   amount=row_a['amount'],
+                                   genetic_loci=row_a['Genetic Loci'],
+                                   molecule=row_a['Molecule'])
                 for j, row_b in group.iterrows():
                     if i != j:  # Prevent self-connections
                         value_a = row_a['amount']
                         value_b = row_b['amount']
 
-                        # Condition: Check value condition
+                        # Check value and edit distance conditions
                         if value_a >= 2 * value_b - 1:
-                            # Check edit distance condition
                             edit_distance = levenshtein(row_a['Nucleotide Sequence'], row_b['Nucleotide Sequence'])
                             if edit_distance == 1:
-                                G.add_edge(f"{loci}_{i}", f"{loci}_{j}")  # Connect from node a to node b
-                                combined_graph.add_edge(f"{loci}_{i}", f"{loci}_{j}")  # Add to combined graph
+                                graphs[g].add_edge(f"{i}", f"{j}")  # Connect nodes
 
-            # Store the individual network for each genetic loci
-            networks[loci] = G
-
-        # Count separate networks (strongly connected components) in the combined graph
-        num_networks = nx.number_strongly_connected_components(combined_graph)
-        print(f"Number of different networks in the combined graph: {num_networks}")
-
-        return networks, combined_graph
-
-    def save_central_nodes(self, networks, filename='central_nodes.csv'):
-        central_nodes_data = []
-
-        for loci, graph in networks.items():
-            # Identify strongly connected components
-            for component in nx.strongly_connected_components(graph):
-                subgraph = graph.subgraph(component)
-                # Identify the central node (the node with the maximum 'amount' in this subgraph)
-                central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['value'])
-                only_once = True
-                while only_once is True:
-                    print(f"I am printing central node {central_node}")
-                    only_once = False
-                central_node_id = central_node[0]
-                central_node_amount = central_node[1]['value']
-
-                # Sum amounts of all nodes connected to the central node
-                total_amount = central_node_amount  # Start with the central node's amount
-                connected_nodes = nx.descendants(subgraph, central_node_id)  # Get all connected nodes
-
-                # Add the amount of each connected node
-                for node in connected_nodes:
-                    total_amount += subgraph.nodes[node]['value']
-
-                # Append the result
-                central_nodes_data.append({
-                    'Central Node': central_node_id,
-                    'Central Amount': central_node_amount,
-                    'Total Amount': total_amount
-                })
-
-        # Create a DataFrame from the collected data
-        central_nodes_df = pd.DataFrame(central_nodes_data)
-
-        # Save to CSV
-        central_nodes_df.to_csv(filename, index=False)
-        print(f"Central nodes saved to {filename}")
-
-        return central_nodes_data  # Return for visualization purposes
-
-    def visualize_individual_networks(self, networks):
-        for loci, graph in networks.items():
-            # Prepare to get the central node for coloring
-            central_node_id = None
-            # Identify central node
-            for component in nx.strongly_connected_components(graph):
-                subgraph = graph.subgraph(component)
-                central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['value'])
-                central_node_id = central_node[0]  # Get the central node ID
-                break  # Only need one central node per individual network
-
-            plt.figure(figsize=(12, 8))
-            pos = nx.spring_layout(graph)  # positions for all nodes
-            labels = nx.get_node_attributes(graph, 'label')
-
-            # Set colors: red for the central node, light blue for others
-            node_colors = ['red' if node == central_node_id else 'lightblue' for node in graph.nodes()]
-
-            nx.draw(graph, pos, with_labels=True, labels=labels, node_color=node_colors, node_size=2000, font_size=10, font_color='black', arrows=True)
-            plt.title(f'Network for {loci}')
+            # Visualize each individual graph
+            nx.draw_spring(graphs[g], with_labels=True)
             plt.show()
 
-    def visualize_combined_network(self, graph, central_nodes_data):
-        plt.figure(figsize=(12, 8))
-        pos = nx.spring_layout(graph)  # positions for all nodes
-        labels = nx.get_node_attributes(graph, 'label')  # Get the labels from node attributes
+            # Calculate the number of connected components in each graph
+            networks_amount = nx.number_connected_components(graphs[g])
+            networks_count += networks_amount
+            print(f"Number of networks in group {loci}: {networks_amount}")
 
-        # Create a set of central node IDs for coloring
-        central_node_ids = {data['Central Node'] for data in central_nodes_data}
+        for g_name, graph in graphs.items():
+            # Add nodes and their attributes
+            for node, data in graph.nodes(data=True):
+                joint_graph.add_node(node, **data)  # Copy attributes as well
 
-        # Set colors: red for central nodes, light blue for others
-        node_colors = ['red' if node in central_node_ids else 'lightblue' for node in graph.nodes()]
+            # Add edges between nodes, maintaining attributes if any
+            for u, v, edge_data in graph.edges(data=True):
+                joint_graph.add_edge(u, v, **edge_data)  # Copy edge attributes if present
 
-        nx.draw(graph, pos, with_labels=True, labels=labels, node_color=node_colors, node_size=2000, font_size=10, font_color='black', arrows=True)
-        plt.title('Combined Network for All Genetic Loci')
+        # Visualize the joint graph
+        nx.draw_spring(joint_graph, with_labels=True)
         plt.show()
+        print(f"Networks in total: {nx.number_connected_components(joint_graph)}")
+
+        print(f"Total amount of networks: {networks_count}")
+        return graphs, unique_molecules
+
+    def networks_resolver(self, networks, toggle="central_node"):
+        """Resolve networks in different ways based on the toggle parameter."""
+        central_nodes_data = []
+
+        # Toggle for selecting resolution method
+        if toggle == "central_node":
+            # Analyze central nodes within each network
+            for loci, graph in networks.items():
+                for component in nx.connected_components(graph):
+                    subgraph = graph.subgraph(component)
+                    central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['amount'])
+                    central_node_id = central_node[0]
+                    central_node_molecule = central_node[1]['molecule']
+                    central_node_amount = central_node[1]['amount']
+                    sequence = central_node[1]['sequence']
+                    loci = central_node[1]['genetic_loci']
+
+                    # Sum amounts of all nodes connected to the central node
+                    total_amount = central_node_amount  # Start with the central node's amount
+                    connected_nodes = nx.descendants(subgraph, central_node_id)
+
+                    for node in connected_nodes:
+                        total_amount += subgraph.nodes[node]['amount']
+
+                    # Append the result
+                    central_nodes_data.append({
+                        'Sequence': sequence,
+                        'Genetic loci': loci,
+                        'Central node ID': central_node_id,
+                        'Central node count': central_node_amount,
+                        'Network nodes count': total_amount
+                    })
+
+            # Create a DataFrame for central nodes data and save to CSV
+            central_nodes_df = pd.DataFrame(central_nodes_data)
+            central_nodes_df.to_csv('central_nodes.csv', index=False)
+            print("Central nodes saved to 'central_nodes.csv'")
+
+            return central_nodes_df  # Return the central nodes DataFrame
+        else:
+            print(f"Toggle '{toggle}' is not implemented.")
+            return None
+
+    def analysis(self, denoised_results, true_umis, col1=1, col2=2):
+        # Step 1: Count of occurrences of sequences in denoised_results that appear in true_UMIs
+        sequences_denoised = set(denoised_results.iloc[:, col1])
+        sequences_true = set(true_umis.iloc[:, col2])
+        common_sequences = sequences_denoised.intersection(sequences_true)
+        occurrence_count = len(common_sequences)
+
+        # Step 2: Percentage of occurrences relative to the total unique sequences in true_UMIs
+        total_unique = len(sequences_denoised)
+        occurrence_percentage = (occurrence_count / total_unique) * 100
+
+        # Step 3: Ratio of rows between denoised_results and true_UMIs
+        row_ratio = occurrence_count / len(true_umis)  # closer to 1 the better
+
+        # Display results
+        print(f"How many true UMIs correctly found: {occurrence_count}")
+        print(f"Correct UMIs constitute to total of {occurrence_percentage:.2f}% UMIs found")
+        print(f"Ratio of denoised UMIs to true UMIs: {row_ratio:.2f}")
+
+        # Return results as a dictionary
+        return {
+            "occurrence_count": occurrence_count,
+            "occurrence_percentage": occurrence_percentage,
+            "row_ratio": row_ratio
+        }

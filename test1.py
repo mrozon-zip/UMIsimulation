@@ -19,15 +19,17 @@ print(result_df)
 
 # Dictionary to store graphs with dynamic names
 graphs = {}
-G = nx.Graph()    # joint graph
 central_nodes_data = []
 networks = {}
+networks_count = 0
+joint_graph = nx.Graph()        # Initialize the joint graph
 
 for loci, group in result_df.groupby('Genetic Loci'):
-    graphs[f"G_{loci}"] = nx.Graph()  # Create a new graph and assign it to G_i
+    g = f"G_{loci}"
+    graphs[g] = nx.Graph()  # Create a new graph and assign it to G_i
 
     for i, row_a in group.iterrows():
-        graphs[f"G_{loci}"].add_node(f"{i}",
+        graphs[g].add_node(f"{i}",
                                      sequence=row_a['Nucleotide Sequence'],
                                      amount=row_a['amount'],
                                      genetic_loci=row_a['Genetic Loci'],
@@ -42,19 +44,17 @@ for loci, group in result_df.groupby('Genetic Loci'):
                     # Check edit distance condition
                     edit_distance = levenshtein(row_a['Nucleotide Sequence'], row_b['Nucleotide Sequence'])
                     if edit_distance == 1:
-                        graphs[f"G_{loci}"].add_edge(f"{i}", f"{j}")  # Connect from node a to node b
-                        G.add_edge(f"{i}", f"{j}")
-    networks[loci] = graphs[f"G_{loci}"]
+                        graphs[g].add_edge(f"{i}", f"{j}")  # Connect from node a to node b
+    networks[loci] = graphs[g]
 
-    nx.draw_spring(graphs[f"G_{loci}"], with_labels=True)
+    nx.draw_spring(graphs[g], with_labels=True)
     plt.show()
-    print(nx.number_connected_components(graphs[f"G_{loci}"]))
+    networks_amount = int(nx.number_connected_components(graphs[g]))
+    networks_count += networks_amount
+    print(f"Number of networks in group {loci} : {networks_amount}")
+print(f"Total amount of networks : {networks_count}")
 
-## ANOTHER METHOD HERE
-    # input: joint graph G
-    # output: csv file with info about all nodes
 for loci, graph in networks.items():
-    # Identify strongly connected components
     for component in nx.connected_components(graph):
         subgraph = graph.subgraph(component)
         # Identify the central node (the node with the maximum 'amount' in this subgraph)
@@ -76,21 +76,31 @@ for loci, graph in networks.items():
         # Append the result
         central_nodes_data.append({
             'Sequence': sequence,
-            'loci': loci,
-            'Central Node': central_node_id,
-            'Central Amount': central_node_amount,
-            'Total Amount': total_amount
+            'Genetic loci': loci,
+            'Central node ID': central_node_id,
+            'Central node count': central_node_amount,
+            'Network nodes count': total_amount
         })
+
+# Iterate through each graph in the dictionary and add nodes and edges to the joint graph
+for g_name, graph in graphs.items():
+    # Add nodes and their attributes
+    for node, data in graph.nodes(data=True):
+        joint_graph.add_node(node, **data)  # Copy attributes as well
+
+    # Add edges between nodes, maintaining attributes if any
+    for u, v, edge_data in graph.edges(data=True):
+        joint_graph.add_edge(u, v, **edge_data)  # Copy edge attributes if present
+
+# Visualize the joint graph
+nx.draw_spring(joint_graph, with_labels=True)
+plt.show()
+print(f"Networks in total: {nx.number_connected_components(joint_graph)}")
 
 # Create a DataFrame from the collected data
 central_nodes_df = pd.DataFrame(central_nodes_data)
-print(central_nodes_df)
 
 # Save to CSV
 central_nodes_df.to_csv('central_nodes.csv', index=False)
 print(f"Central nodes saved to 'central_nodes.csv' ")
-
-nx.draw_spring(G, with_labels=True)
-plt.show()
-print(nx.number_connected_components(G))
 
