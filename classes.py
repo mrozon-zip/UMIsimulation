@@ -23,16 +23,8 @@ class simPCR:
         # Convert the set to a list for DataFrame creation
         sequences = list(sequences)
 
-        # Assign random genetic loci between 1 and 8 to each sequence
-        genetic_loci = [random.randint(1, 8) for _ in range(self.number_of_rows)]
-
-        # Create a DataFrame with sequences and their corresponding genetic loci
+        # Create a DataFrame with sequences
         self.df = pd.DataFrame(sequences, columns=['Nucleotide Sequence'])
-        self.df['Genetic Loci'] = genetic_loci
-
-        # Sort the DataFrame by 'Genetic Loci' in increasing order
-        self.df.sort_values(by='Genetic Loci', inplace=True)
-        self.df.reset_index(drop=True, inplace=True)
 
         # Assign molecule numbers from 1 to the number_of_rows to each sequence
         self.df['Molecule'] = range(1, self.number_of_rows + 1)
@@ -43,7 +35,7 @@ class simPCR:
         self.df['Edit Distance'] = 0  # Initialize the Edit Distance column
 
         # Reorder the columns to match the desired output
-        self.df = self.df[['root', 'Molecule', 'Nucleotide Sequence', 'Genetic Loci', 'Type', 'Edit Distance']]
+        self.df = self.df[['root', 'Molecule', 'Nucleotide Sequence', 'Type', 'Edit Distance']]
 
         # Output the resulting DataFrame to a CSV file
         self.df.to_csv(output_filename, index=False)
@@ -101,7 +93,7 @@ class simPCR:
             # Iterate through each row and check for amplification and errors
             for index, row in self.df.iterrows():
                 sequence = row['Nucleotide Sequence']
-                molecule_number = row['Molecule']
+                # molecule_number = row['Molecule']
                 type_value = row['Type']
                 root_value = row['root']  # Get the root value
 
@@ -156,14 +148,6 @@ class simPCR:
         self.df.to_csv(output_filename, index=False)
         print(f"File '{output_filename}' has been created with {len(self.df)} rows.")
 
-    def true_UMIs_analyze(self):
-        if self.df is not None:
-            loci_counts = self.df['Genetic Loci'].value_counts()
-            print("Counts of rows with the same Genetic Loci:")
-            print(loci_counts)
-        else:
-            print("Error: True UMIs have not been created yet.")
-
     def PCR_analyze(self):
         if self.df is not None:
             unique_molecule_numbers = self.df['Molecule'].nunique()
@@ -196,28 +180,27 @@ class Denoiser:
         # Collapse rows into one per unique molecule, aggregating the other columns
         collapsed_df = filtered_df.groupby(['Molecule']).agg({
             'Nucleotide Sequence': 'first',  # Choose the first occurrence
-            'Genetic Loci': 'first',  # Choose the first occurrence
             'Type': 'first',  # Choose the first occurrence
             'Edit Distance': 'first'
         }).reset_index()
 
         # Output the collapsed DataFrame to 'simple_denoiser_result_enhanced.csv'
-        collapsed_df.to_csv('simple_denoiser_result_enhanced.csv', index=False)
-        print(f"Enhanced results saved to 'simple_denoiser_result_enhanced.csv' with {len(collapsed_df)} rows.")
+        collapsed_df.to_csv('simple_result_enhanced.csv', index=False)
+        print(f"Enhanced results saved to 'simple_result_enhanced.csv' with {len(collapsed_df)} rows.")
 
         # Create another DataFrame for the simple result with a new 'Molecule' column
         simple_result_df = collapsed_df.copy()
         simple_result_df['Molecule'] = range(1, len(simple_result_df) + 1)  # Generate new molecule numbers
 
         # Output the simple result to 'simple_denoiser_result.csv'
-        simple_result_df[['Molecule', 'Nucleotide Sequence', 'Genetic Loci']].to_csv('simple_denoiser_result.csv',
-                                                                                     index=False)
-        print(f"Simple results saved to 'simple_denoiser_result.csv' with {len(simple_result_df)} rows.")
+        simple_result_df[['Molecule', 'Nucleotide Sequence']].to_csv('simple_result.csv', index=False)
+        print(f"Simple results saved to 'simple_result.csv' with {len(simple_result_df)} rows.")
 
         return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
 
     def directional_networks(self):
-        """Creates a dictionary of network graphs for each genetic loci."""
+        """Creates a dictionary of network graphs."""
+        global graph
         if self.df is None:
             print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
@@ -235,96 +218,76 @@ class Denoiser:
         unique_molecules = len(result_df)
 
         # Initialize dictionaries
-        graphs = {}
         networks_count = 0
-        joint_graph = nx.Graph()
+        graph = nx.Graph()
 
-        # Loop through each genetic loci group
-        for loci, group in result_df.groupby('Genetic Loci'):
-            g = f"G_{loci}"
-            graphs[g] = nx.Graph()  # Create a new graph for each loci
+        # Loop through each genetic group
+        for i, row_a in result_df.iterrows():
+            graph.add_node(f"{row_a['Nucleotide Sequence']}",
+                           sequence=row_a['Nucleotide Sequence'],
+                           amount=row_a['amount'],
+                           molecule=row_a['Molecule'])
+            for j, row_b in result_df.iterrows():
+                if i != j:  # Prevent self-connections
+                    value_a = row_a['amount']
+                    value_b = row_b['amount']
 
-            # Add nodes and edges based on conditions
-            for i, row_a in group.iterrows():
-                graphs[g].add_node(f"{i}",
-                                   sequence=row_a['Nucleotide Sequence'],
-                                   amount=row_a['amount'],
-                                   genetic_loci=row_a['Genetic Loci'],
-                                   molecule=row_a['Molecule'])
-                for j, row_b in group.iterrows():
-                    if i != j:  # Prevent self-connections
-                        value_a = row_a['amount']
-                        value_b = row_b['amount']
+                    # Check value and edit distance conditions
+                    if value_a >= 2 * value_b - 1:
+                        edit_distance = levenshtein(row_a['Nucleotide Sequence'], row_b['Nucleotide Sequence'])
+                        if edit_distance == 1:
+                            graph.add_edge(f"{row_a['Nucleotide Sequence']}", f"{row_b['Nucleotide Sequence']}")  # Connect nodes
 
-                        # Check value and edit distance conditions
-                        if value_a >= 2 * value_b - 1:
-                            edit_distance = levenshtein(row_a['Nucleotide Sequence'], row_b['Nucleotide Sequence'])
-                            if edit_distance == 1:
-                                graphs[g].add_edge(f"{i}", f"{j}")  # Connect nodes
+        # Visualize graph
+        nx.draw_spring(graph, with_labels=True)
+        plt.show()
 
-            # Visualize each individual graph
-            nx.draw_spring(graphs[g], with_labels=True)
-            plt.show()
-
-            # Calculate the number of connected components in each graph
-            networks_amount = nx.number_connected_components(graphs[g])
-            networks_count += networks_amount
-            print(f"Number of networks in group {loci}: {networks_amount}")
-
-        for g_name, graph in graphs.items():
-            # Add nodes and their attributes
-            for node, data in graph.nodes(data=True):
-                joint_graph.add_node(node, **data)  # Copy attributes as well
-
-            # Add edges between nodes, maintaining attributes if any
-            for u, v, edge_data in graph.edges(data=True):
-                joint_graph.add_edge(u, v, **edge_data)  # Copy edge attributes if present
+        # Calculate the number of connected components in each graph
+        networks_amount = nx.number_connected_components(graph)
+        networks_count += networks_amount
+        print(f"Number of networks: {networks_amount}")
 
         # Visualize the joint graph
-        nx.draw_spring(joint_graph, with_labels=True)
+        nx.draw_spring(graph, with_labels=True)
         plt.show()
-        print(f"Networks in total: {nx.number_connected_components(joint_graph)}")
 
         print(f"Total amount of networks: {networks_count}")
-        return graphs, unique_molecules
+        return graph, unique_molecules
 
-    def networks_resolver(self, networks, toggle="central_node"):
+    def networks_resolver(self, toggle="central_node"):
         """Resolve networks in different ways based on the toggle parameter."""
         central_nodes_data = []
 
         # Toggle for selecting resolution method
         if toggle == "central_node":
-            # Analyze central nodes within each network
-            for loci, graph in networks.items():
-                for component in nx.connected_components(graph):
-                    subgraph = graph.subgraph(component)
-                    central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['amount'])
-                    central_node_id = central_node[0]
-                    central_node_molecule = central_node[1]['molecule']
-                    central_node_amount = central_node[1]['amount']
-                    sequence = central_node[1]['sequence']
-                    loci = central_node[1]['genetic_loci']
+            # Analyze central nodes within network
+            for component in nx.connected_components(graph):
+                subgraph = graph.subgraph(component)
+                central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['amount'])
+                central_node_id = central_node[0]
+                # central_node_molecule = central_node[1]['molecule']
+                central_node_amount = central_node[1]['amount']
+                sequence = central_node[1]['sequence']
 
-                    # Sum amounts of all nodes connected to the central node
-                    total_amount = central_node_amount  # Start with the central node's amount
-                    connected_nodes = nx.descendants(subgraph, central_node_id)
+                # Sum amounts of all nodes connected to the central node
+                total_amount = central_node_amount  # Start with the central node's amount
+                connected_nodes = nx.descendants(subgraph, central_node_id)
 
-                    for node in connected_nodes:
-                        total_amount += subgraph.nodes[node]['amount']
+                for node in connected_nodes:
+                    total_amount += subgraph.nodes[node]['amount']
 
-                    # Append the result
-                    central_nodes_data.append({
-                        'Sequence': sequence,
-                        'Genetic loci': loci,
-                        'Central node ID': central_node_id,
-                        'Central node count': central_node_amount,
-                        'Network nodes count': total_amount
-                    })
+                # Append the result
+                central_nodes_data.append({
+                    'Sequence': sequence,
+                    'Central node ID': central_node_id,
+                    'Central node count': central_node_amount,
+                    'Network nodes count': total_amount
+                })
 
             # Create a DataFrame for central nodes data and save to CSV
             central_nodes_df = pd.DataFrame(central_nodes_data)
-            central_nodes_df.to_csv('central_nodes.csv', index=False)
-            print("Central nodes saved to 'central_nodes.csv'")
+            central_nodes_df.to_csv('directional_results.csv', index=False)
+            print("Central nodes saved to 'directional_result.csv'")
 
             return central_nodes_df  # Return the central nodes DataFrame
         else:

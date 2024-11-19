@@ -1,9 +1,8 @@
 from classes import simPCR
 
 # Example usage
-simulator = simPCR(length=24, number_of_rows=100)
+simulator = simPCR(length=6, number_of_rows=100)
 simulator.create_true_UMIs()
-simulator.true_UMIs_analyze()
 error_types = {
     'substitution': 0.6,  # 60% chance of substitution
     'deletion': 0.2,      # 20% chance of deletion
