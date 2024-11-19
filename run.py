@@ -24,9 +24,7 @@ elif method == 1:
     graph = directional_denoiser[0]
 
     # Step 2: Use the networks_resolver method to analyze central nodes in the networks
-    central_nodes_df = denoiser.networks_resolver(graph, toggle="central_node")
-
-    denoiser.analysis("simple_denoiser.csv", "true_UMIs.csv")
+    central_nodes_df = denoiser.networks_resolver(toggle="central_node")
 
     # Display the DataFrame with central nodes for verification
     print(central_nodes_df)
