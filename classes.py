@@ -246,7 +246,7 @@ class Denoiser:
         # Initialize the "after" graph by copying the "before" graph
         after_graph = before_graph.copy()
 
-        # Remove edges with edit distance > 2 from the "after" graph
+        # Remove edges with edit distance >= 2 from the "after" graph
         edges_to_remove = []
         for u, v in after_graph.edges:
             if u != v:  # Prevent self-edges
@@ -254,14 +254,14 @@ class Denoiser:
                 sequence_v = after_graph.nodes[v]['sequence']
                 edit_distance = levenshtein(sequence_u, sequence_v)
 
-                if edit_distance > 2:
+                if edit_distance >= 2:
                     edges_to_remove.append((u, v))
 
         # Remove the identified edges
         after_graph.remove_edges_from(edges_to_remove)
 
         # Visualize the "after" graph
-        print(f"Graph after filtering edges (edit distance <= 2):")
+        print(f"Graph after filtering edges (edit distance < 2):")
         print(f"Number of nodes: {after_graph.number_of_nodes()}, Number of edges: {after_graph.number_of_edges()}")
         nx.draw_spring(after_graph, with_labels=True)
         plt.show()
@@ -269,13 +269,19 @@ class Denoiser:
         # Return the two graphs and the number of unique molecules
         return before_graph, after_graph, unique_molecules
 
-    def networks_resolver(self, toggle="central_node"):
-        """Resolve networks in different ways based on the toggle parameter."""
+    def networks_resolver(self, graph, toggle="central_node"):
+        """
+        Resolve networks in different ways based on the toggle parameter.
+
+        Parameters:
+        - graph: The NetworkX graph to analyze.
+        - toggle: The resolution method to use (default: "central_node").
+        """
         central_nodes_data = []
 
         # Toggle for selecting resolution method
         if toggle == "central_node":
-            # Analyze central nodes within network
+            # Analyze central nodes within the given graph
             for component in nx.connected_components(graph):
                 subgraph = graph.subgraph(component)
                 central_node = max(subgraph.nodes(data=True), key=lambda x: x[1]['amount'])
@@ -334,3 +340,45 @@ class Denoiser:
             "occurrence_percentage": occurrence_percentage,
             "row_ratio": row_ratio
         }
+
+    def node_probe(self, graph, tier1=5, tier2=3):
+        """
+        Draws a subgraph centered on a randomly selected node with at least `tier1` connections.
+        The subgraph includes tier-1 connections and up to `tier2` random tier-2 connections.
+
+        Parameters:
+        - graph: The input graph (NetworkX object) to probe.
+        - tier1: Minimum number of connections required for a node to be considered (default: 5).
+        - tier2: Maximum number of tier-2 connections to display for each tier-1 node (default: 3).
+        """
+        # Filter nodes with at least `tier1` connections
+        eligible_nodes = [node for node in graph.nodes if len(list(graph.neighbors(node))) >= tier1]
+
+        if not eligible_nodes:
+            print(f"No nodes found with at least {tier1} connections.")
+            return
+
+        # Randomly select a node from the eligible nodes
+        selected_node = random.choice(eligible_nodes)
+        print(f"Selected node: {selected_node}")
+
+        # Get tier-1 connections
+        tier1_nodes = list(graph.neighbors(selected_node))
+
+        # Build the subgraph
+        subgraph_nodes = {selected_node}  # Include the selected node
+        subgraph_nodes.update(tier1_nodes)  # Include all tier-1 nodes
+
+        for tier1_node in tier1_nodes:
+            tier2_neighbors = list(graph.neighbors(tier1_node))
+            # Randomly select up to `tier2` neighbors from tier-2 connections
+            random_tier2 = random.sample(tier2_neighbors, min(len(tier2_neighbors), tier2))
+            subgraph_nodes.update(random_tier2)
+
+        # Create the subgraph
+        subgraph = graph.subgraph(subgraph_nodes)
+
+        # Visualize the subgraph
+        print(f"Visualizing subgraph with {len(subgraph.nodes)} nodes and {len(subgraph.edges)} edges.")
+        nx.draw_spring(subgraph, with_labels=True, node_size=500, node_color="lightblue", font_size=10)
+        plt.show()

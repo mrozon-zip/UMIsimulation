@@ -1,5 +1,3 @@
-import pandas as pd
-
 from classes import Denoiser
 
 # Create an instance of the Denoiser class
@@ -19,15 +17,13 @@ if method == 0:
         print(f"Number of rows in the collapsed DataFrame: {len(filtered_results)}")
 elif method == 1:
     # Step 1: Run the directional_networks method to create networks
-    directional_denoiser = denoiser.directional_networks()
-
-    graph = directional_denoiser[0]
+    before_graph, after_graph, unique_molecules = denoiser.directional_networks()
 
     # Step 2: Use the networks_resolver method to analyze central nodes in the networks
-    central_nodes_df = denoiser.networks_resolver(toggle="central_node")
+    central_nodes_df = denoiser.networks_resolver(after_graph, toggle="central_node")
 
+    # Step 3: Use the node_probe method on the after_graph
     denoiser.node_probe(after_graph, tier1=5, tier2=3)
 
     # Display the DataFrame with central nodes for verification
     print(central_nodes_df)
-
