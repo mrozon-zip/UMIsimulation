@@ -199,8 +199,7 @@ class Denoiser:
         return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
 
     def directional_networks(self):
-        """Creates a dictionary of network graphs."""
-        global graph
+        """Creates two graphs: one before and one after removing edges with edit distance > 2."""
         if self.df is None:
             print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
@@ -214,45 +213,61 @@ class Denoiser:
 
         # Keep only the first occurrence of each Molecule
         result_df = merged_df.drop_duplicates(subset=['Molecule'])
-        print(f"Number of unique molecules before denoising: {len(result_df)}")
         unique_molecules = len(result_df)
+        print(f"Number of unique molecules before denoising: {unique_molecules}")
 
-        # Initialize dictionaries
-        networks_count = 0
-        graph = nx.Graph()
+        # Initialize the "before" graph
+        before_graph = nx.Graph()
 
-        # Loop through each genetic group
+        # Add all nodes and edges to the "before" graph based on the first condition
         for i, row_a in result_df.iterrows():
-            graph.add_node(f"{row_a['Nucleotide Sequence']}",
-                           sequence=row_a['Nucleotide Sequence'],
-                           amount=row_a['amount'],
-                           molecule=row_a['Molecule'])
+            before_graph.add_node(f"{row_a['Nucleotide Sequence']}",
+                                  sequence=row_a['Nucleotide Sequence'],
+                                  amount=row_a['amount'],
+                                  molecule=row_a['Molecule'])
             for j, row_b in result_df.iterrows():
                 if i != j:  # Prevent self-connections
                     value_a = row_a['amount']
                     value_b = row_b['amount']
 
-                    # Check value and edit distance conditions
+                    # Add edges based on the first condition
                     if value_a >= 2 * value_b - 1:
-                        edit_distance = levenshtein(row_a['Nucleotide Sequence'], row_b['Nucleotide Sequence'])
-                        if edit_distance == 1:
-                            graph.add_edge(f"{row_a['Nucleotide Sequence']}", f"{row_b['Nucleotide Sequence']}")  # Connect nodes
+                        before_graph.add_edge(f"{row_a['Nucleotide Sequence']}",
+                                              f"{row_b['Nucleotide Sequence']}")
 
-        # Visualize graph
-        nx.draw_spring(graph, with_labels=True)
+        before_graph.remove_edges_from(nx.selfloop_edges(before_graph))
+
+        # Visualize the "before" graph
+        print(f"Graph before filtering edges (value condition only):")
+        print(f"Number of nodes: {before_graph.number_of_nodes()}, Number of edges: {before_graph.number_of_edges()}")
+        nx.draw_spring(before_graph, with_labels=True)
         plt.show()
 
-        # Calculate the number of connected components in each graph
-        networks_amount = nx.number_connected_components(graph)
-        networks_count += networks_amount
-        print(f"Number of networks: {networks_amount}")
+        # Initialize the "after" graph by copying the "before" graph
+        after_graph = before_graph.copy()
 
-        # Visualize the joint graph
-        nx.draw_spring(graph, with_labels=True)
+        # Remove edges with edit distance > 2 from the "after" graph
+        edges_to_remove = []
+        for u, v in after_graph.edges:
+            if u != v:  # Prevent self-edges
+                sequence_u = after_graph.nodes[u]['sequence']
+                sequence_v = after_graph.nodes[v]['sequence']
+                edit_distance = levenshtein(sequence_u, sequence_v)
+
+                if edit_distance > 2:
+                    edges_to_remove.append((u, v))
+
+        # Remove the identified edges
+        after_graph.remove_edges_from(edges_to_remove)
+
+        # Visualize the "after" graph
+        print(f"Graph after filtering edges (edit distance <= 2):")
+        print(f"Number of nodes: {after_graph.number_of_nodes()}, Number of edges: {after_graph.number_of_edges()}")
+        nx.draw_spring(after_graph, with_labels=True)
         plt.show()
 
-        print(f"Total amount of networks: {networks_count}")
-        return graph, unique_molecules
+        # Return the two graphs and the number of unique molecules
+        return before_graph, after_graph, unique_molecules
 
     def networks_resolver(self, toggle="central_node"):
         """Resolve networks in different ways based on the toggle parameter."""
