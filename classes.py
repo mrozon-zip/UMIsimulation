@@ -199,8 +199,24 @@ class Denoiser:
 
         return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
 
-    def directional_networks(self):
-        """Creates two graphs: one before and one after removing edges with edit distance > 2."""
+    def directional_networks(self, show=3):
+        """
+        Creates and optionally visualizes two network graphs:
+        - Before filtering edges by edit distance ("before" graph).
+        - After filtering edges by edit distance ("after" graph).
+
+        Parameters:
+        - show (int): Controls which graphs to display.
+          0 - Show no graphs.
+          1 - Show "before" graph only.
+          2 - Show "after" graph only.
+          3 - Show both graphs (default).
+
+        Returns:
+        - before_graph: The graph before edge filtering by edit distance.
+        - after_graph: The graph after edge filtering by edit distance.
+        - unique_molecules: Number of unique molecules in the DataFrame.
+        """
         if self.df is None:
             print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
@@ -220,54 +236,54 @@ class Denoiser:
         # Initialize the "before" graph
         before_graph = nx.Graph()
 
-        # Add all nodes and edges to the "before" graph based on the first condition
+        # Add nodes and edges to the "before" graph
         for i, row_a in result_df.iterrows():
             before_graph.add_node(f"{row_a['Nucleotide Sequence']}",
                                   sequence=row_a['Nucleotide Sequence'],
                                   amount=row_a['amount'],
                                   molecule=row_a['Molecule'])
             for j, row_b in result_df.iterrows():
-                if i != j:  # Prevent self-connections
+                if i != j:  # Prevent self-loops
                     value_a = row_a['amount']
                     value_b = row_b['amount']
 
-                    # Add edges based on the first condition
+                    # Add edge based on value condition
                     if value_a >= 2 * value_b - 1:
-                        before_graph.add_edge(f"{row_a['Nucleotide Sequence']}",
-                                              f"{row_b['Nucleotide Sequence']}")
+                        before_graph.add_edge(f"{row_a['Nucleotide Sequence']}", f"{row_b['Nucleotide Sequence']}")
+
+        print("Graph before filtering edges (value condition only):")
+        print(f"Number of nodes: {before_graph.number_of_nodes()}, Number of edges: {before_graph.number_of_edges()}")
+
+        # Show the "before" graph if requested
+        if show in (1, 3):
+            print("Visualizing 'before' graph...")
+            nx.draw_spring(before_graph, with_labels=True, node_size=20, font_size=8)
+            plt.title("Before Graph")
+            plt.show()
 
         before_graph.remove_edges_from(nx.selfloop_edges(before_graph))
 
-        # Visualize the "before" graph
-        print(f"Graph before filtering edges (value condition only):")
-        print(f"Number of nodes: {before_graph.number_of_nodes()}, Number of edges: {before_graph.number_of_edges()}")
-        nx.draw_spring(before_graph, with_labels=True)
-        plt.show()
-
-        # Initialize the "after" graph by copying the "before" graph
+        # Initialize the "after" graph
         after_graph = before_graph.copy()
 
-        # Remove edges with edit distance >= 2 from the "after" graph
-        edges_to_remove = []
-        for u, v in after_graph.edges:
-            if u != v:  # Prevent self-edges
-                sequence_u = after_graph.nodes[u]['sequence']
-                sequence_v = after_graph.nodes[v]['sequence']
-                edit_distance = levenshtein(sequence_u, sequence_v)
+        # Remove edges from the "after" graph based on edit distance condition
+        for u, v in list(after_graph.edges):
+            sequence_u = after_graph.nodes[u]['sequence']
+            sequence_v = after_graph.nodes[v]['sequence']
+            edit_distance = levenshtein(sequence_u, sequence_v)
+            if edit_distance >= 2:
+                after_graph.remove_edge(u, v)
 
-                if edit_distance >= 2:
-                    edges_to_remove.append((u, v))
-
-        # Remove the identified edges
-        after_graph.remove_edges_from(edges_to_remove)
-
-        # Visualize the "after" graph
-        print(f"Graph after filtering edges (edit distance < 2):")
+        print("Graph after filtering edges (edit distance < 2):")
         print(f"Number of nodes: {after_graph.number_of_nodes()}, Number of edges: {after_graph.number_of_edges()}")
-        nx.draw_spring(after_graph, with_labels=True)
-        plt.show()
 
-        # Return the two graphs and the number of unique molecules
+        # Show the "after" graph if requested
+        if show in (2, 3):
+            print("Visualizing 'after' graph...")
+            nx.draw_spring(after_graph, with_labels=True, node_size=20, font_size=8)
+            plt.title("After Graph")
+            plt.show()
+
         return before_graph, after_graph, unique_molecules
 
     def networks_resolver(self, graph, toggle="central_node"):
