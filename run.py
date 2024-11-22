@@ -16,6 +16,10 @@ if method == 0:
     if filtered_results is not None:
         print(f"Number of rows in the collapsed DataFrame: {len(filtered_results)}")
 elif method == 1:
+    # File paths for the data
+    denoised_file = "directional_results.csv"
+    true_umis_file = "true_UMIs.csv"
+
     # Step 1: Run the directional_networks method to create networks
     before_graph, after_graph, unique_molecules = denoiser.directional_networks()
 
@@ -25,5 +29,5 @@ elif method == 1:
     # Step 3: Use the node_probe method on the after_graph
     denoiser.node_probe(after_graph, tier1=5, tier2=3)
 
-    # Display the DataFrame with central nodes for verification
-    print(central_nodes_df)
+    # Call the analysis method
+    denoiser.analysis(denoised_file, true_umis_file)

@@ -3,6 +3,7 @@ import random
 from polyleven import levenshtein
 import networkx as nx
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 class simPCR:
@@ -315,30 +316,78 @@ class Denoiser:
             print(f"Toggle '{toggle}' is not implemented.")
             return None
 
-    def analysis(self, denoised_results, true_umis, col1=1, col2=2):
-        # Step 1: Count of occurrences of sequences in denoised_results that appear in true_UMIs
-        sequences_denoised = set(denoised_results.iloc[:, col1])
-        sequences_true = set(true_umis.iloc[:, col2])
-        common_sequences = sequences_denoised.intersection(sequences_true)
-        occurrence_count = len(common_sequences)
+    def analysis(self, denoised_file, true_umis_file, amplified_umis_file="amplified_UMIs.csv"):
+        """
+        Analyze the overlap between denoised_results and true_umis and produce a confusion matrix.
 
-        # Step 2: Percentage of occurrences relative to the total unique sequences in true_UMIs
-        total_unique = len(sequences_denoised)
-        occurrence_percentage = (occurrence_count / total_unique) * 100
+        Parameters:
+        - denoised_file: File path or DataFrame containing denoised results.
+        - true_umis_file: File path or DataFrame containing true UMIs.
+        - amplified_umis_file: File path to the file containing all amplified UMIs (default: "amplified_UMIs.csv").
 
-        # Step 3: Ratio of rows between denoised_results and true_UMIs
-        row_ratio = occurrence_count / len(true_umis)  # closer to 1 the better
+        Returns:
+        - A dictionary with TP, TN, FP, FN counts and a visualization of the confusion matrix.
+        """
+
+        def detect_sequence_column(df):
+            """Detect the column containing sequences with only 'A', 'T', 'C', and 'G'."""
+            for col in df.columns:
+                if df[col].dropna().apply(lambda x: isinstance(x, str) and all(c in 'ATCG' for c in x)).all():
+                    return col
+            raise ValueError("No valid sequence column found in the DataFrame.")
+
+        # Load the inputs if they are file paths
+        if isinstance(denoised_file, str):
+            denoised_results = pd.read_csv(denoised_file)
+        else:
+            denoised_results = denoised_file
+
+        if isinstance(true_umis_file, str):
+            true_umis = pd.read_csv(true_umis_file)
+        else:
+            true_umis = true_umis_file
+
+        amplified_umis = pd.read_csv(amplified_umis_file)
+
+        # Detect sequence columns in all DataFrames
+        sequence_col_denoised = detect_sequence_column(denoised_results)
+        sequence_col_true = detect_sequence_column(true_umis)
+        sequence_col_amplified = detect_sequence_column(amplified_umis)
+
+        # Extract sequences from the detected columns
+        sequences_denoised = set(denoised_results[sequence_col_denoised])
+        sequences_true = set(true_umis[sequence_col_true])
+        sequences_amplified = set(amplified_umis[sequence_col_amplified])
+
+        # Calculate confusion matrix components
+        tp = len(sequences_denoised.intersection(sequences_true))  # True Positives
+        tn = len(sequences_amplified - sequences_denoised - sequences_true)  # True Negatives
+        fp = len(sequences_denoised - sequences_true)  # False Positives
+        fn = len(sequences_true - sequences_denoised)  # False Negatives
+
+        # Create the confusion matrix
+        cm = [[tp, fn], [fp, tn]]
+
+        # Visualize the confusion matrix
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Actual Positives", "Actual Negatives"],
+                    yticklabels=["Predicted Positives", "Predicted Negatives"])
+        plt.title("Confusion Matrix")
+        plt.xlabel("Actual")
+        plt.ylabel("Predicted")
+        plt.show()
 
         # Display results
-        print(f"How many true UMIs correctly found: {occurrence_count}")
-        print(f"Correct UMIs constitute to total of {occurrence_percentage:.2f}% UMIs found")
-        print(f"Ratio of denoised UMIs to true UMIs: {row_ratio:.2f}")
+        print(f"True Positives (TP): {tp}")
+        print(f"True Negatives (TN): {tn}")
+        print(f"False Positives (FP): {fp}")
+        print(f"False Negatives (FN): {fn}")
 
-        # Return results as a dictionary
+        # Return the confusion matrix components
         return {
-            "occurrence_count": occurrence_count,
-            "occurrence_percentage": occurrence_percentage,
-            "row_ratio": row_ratio
+            "True Positives": tp,
+            "True Negatives": tn,
+            "False Positives": fp,
+            "False Negatives": fn
         }
 
     def node_probe(self, graph, tier1=5, tier2=3):
