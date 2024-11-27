@@ -34,10 +34,9 @@ class simPCR:
         self.df['root'] = self.df['Molecule'].astype(str)  # Copy Molecule to root
         self.df['Type'] = 'original'  # All initial sequences are original
         self.df['Edit Distance'] = 0  # Initialize the Edit Distance column
-        self.df['amount'] = 1         # Initilize the amount
 
         # Reorder the columns to match the desired output
-        self.df = self.df[['root', 'Molecule', 'Nucleotide Sequence', 'Type', 'Edit Distance', 'amount']]
+        self.df = self.df[['root', 'Molecule', 'Nucleotide Sequence', 'Type', 'Edit Distance']]
 
         # Output the resulting DataFrame to a CSV file
         self.df.to_csv(output_filename, index=False)
@@ -95,7 +94,9 @@ class simPCR:
             # Iterate through each row and check for amplification and errors
             for index, row in self.df.iterrows():
                 sequence = row['Nucleotide Sequence']
+                # molecule_number = row['Molecule']
                 type_value = row['Type']
+                root_value = row['root']  # Get the root value
 
                 # Append the original row (no changes)
                 amplified_rows.append(row)
@@ -108,8 +109,8 @@ class simPCR:
                     mutated_sequence = random_errors(sequence, error_rate, error_types)
                     row_copy['Nucleotide Sequence'] = mutated_sequence
 
-                    # Change the 'molecule' value for the amplified row
-                    row_copy['Molecule'] = next_molecule_number
+                    # Change the 'root' value for the amplified row
+                    row_copy['root'] = f"{root_value}a"  # Add 'a' to the root value
 
                     # Check if the sequence was actually mutated
                     if mutated_sequence != sequence:
@@ -122,11 +123,13 @@ class simPCR:
                         row_copy['Edit Distance'] = edit_distance
                         row_copy['Molecule'] = next_molecule_number  # Update molecule number
                         next_molecule_number += 1  # Ensure the next unique number is used
-                        amplified_rows.append(row_copy)
                     else:
-                        # If no error occurs during amplification, add to amount
-                        row['amount'] += 1
+                        # If no error occurs during amplification, retain existing distance
+                        row_copy['Type'] = type_value  # Maintain original type
+                        row_copy['Edit Distance'] = 0  # No error, so distance is 0
 
+                    # Add the modified row (amplified and possibly mutated)
+                    amplified_rows.append(row_copy)
 
             # At the end of each cycle, calculate edit distance for all rows
             for amplified_row in amplified_rows:
@@ -224,6 +227,7 @@ class Denoiser:
 
         # Merge the count back into the original DataFrame
         merged_df = pd.merge(self.df, count_df, on='Molecule')
+        merged_df.to_csv('amplified_UMIs_old.csv', index=False)
 
         # Keep only the first occurrence of each Molecule
         result_df = merged_df.drop_duplicates(subset=['Molecule'])

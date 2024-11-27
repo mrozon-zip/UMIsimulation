@@ -1,15 +1,17 @@
-import networkx as nx
-import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
 import random
 from polyleven import levenshtein
+import networkx as nx
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 class simPCR:
     def __init__(self, length, number_of_rows):
         self.length = length
         self.number_of_rows = number_of_rows
-        self.df = None  # DataFrame to store the UMIs
+        self.df_old = None  # DataFrame for old representation
+        self.df_new = None  # DataFrame for new representation
 
     def create_true_UMIs(self, output_filename='true_UMIs.csv'):
         # Generate random nucleotide sequences
@@ -23,27 +25,30 @@ class simPCR:
         # Convert the set to a list for DataFrame creation
         sequences = list(sequences)
 
-        # Create a DataFrame with sequences
-        self.df = pd.DataFrame(sequences, columns=['Nucleotide Sequence'])
+        # Create DataFrames for old and new representations
+        self.df_old = pd.DataFrame(sequences, columns=['Nucleotide Sequence'])
+        self.df_new = pd.DataFrame(sequences, columns=['Nucleotide Sequence'])
 
         # Assign molecule numbers from 1 to the number_of_rows to each sequence
-        self.df['Molecule'] = range(1, self.number_of_rows + 1)
+        self.df_old['Molecule'] = range(1, self.number_of_rows + 1)
+        self.df_new['Molecule'] = range(1, self.number_of_rows + 1)
 
-        # Initialize the 'root', 'Type', 'Edit Distance', and 'amount' columns
-        self.df['root'] = self.df['Molecule'].astype(str)
-        self.df['Type'] = 'original'
-        self.df['Edit Distance'] = 0
-        self.df['amount'] = 1
+        # Initialize additional columns
+        self.df_old['root'] = self.df_old['Molecule'].astype(str)
+        self.df_old['Type'] = 'original'
+        self.df_old['Edit Distance'] = 0
 
-        # Save the resulting DataFrame
-        self.df.to_csv(output_filename, index=False)
-        print(f"File '{output_filename}' has been created with {self.number_of_rows} unique rows and sequence length of {self.length}.")
+        self.df_new['root'] = self.df_new['Molecule'].astype(str)
+        self.df_new['Type'] = 'original'
+        self.df_new['Edit Distance'] = 0
+        self.df_new['amount'] = 1
 
-    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles, output_filename='amplified_UMIs.csv'):
-        if self.df is None:
-            print("Error: True UMIs have not been created yet.")
-            return
+        # Save the initial true UMIs
+        self.df_old.to_csv(output_filename.replace('.csv', '_old.csv'), index=False)
+        self.df_new.to_csv(output_filename.replace('.csv', '_new.csv'), index=False)
+        print(f"Initial UMIs saved to '{output_filename.replace('.csv', '_old.csv')}' and '{output_filename.replace('.csv', '_new.csv')}'.")
 
+    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles):
         def introduce_errors(sequence, error_rate, error_types):
             nucleotides = ['A', 'C', 'G', 'T']
             sequence_list = list(sequence)
@@ -73,46 +78,78 @@ class simPCR:
             return ''.join(sequence_list)
 
         for cycle in range(amplification_cycles):
-            original_df = self.df.copy()
+            next_molecule_number = self.df_old['Molecule'].max() + 1
+            old_rows = []
             new_rows = []
 
-            for index, row in original_df.iterrows():
+            for index, row in self.df_new.iterrows():
                 if random.random() > amplification_probability:
                     continue
 
                 initial_amount = row['amount']
-                new_amount = initial_amount
-
                 for _ in range(initial_amount):
                     sequence = row['Nucleotide Sequence']
                     mutated_sequence = introduce_errors(sequence, error_rate, error_types)
-                    changes_made = mutated_sequence != sequence
 
-                    if changes_made:
-                        new_rows.append({
-                            "root": row['Molecule'],
-                            "Molecule": self.df['Molecule'].max() + 1,
+                    if mutated_sequence != sequence:  # Error introduced
+                        # Add to both old and new representations
+                        old_rows.append({
+                            "root": row['root'],
+                            "Molecule": next_molecule_number,
                             "Nucleotide Sequence": mutated_sequence,
-                            "Type": 'error' if row['Type'] == 'original' else row['Type'],
-                            "Edit Distance": levenshtein(sequence, mutated_sequence),
-                            "amount": initial_amount
+                            "Type": 'error',
+                            "Edit Distance": levenshtein(sequence, mutated_sequence)
                         })
-                    else:
-                        new_amount += 1
+                        new_rows.append({
+                            "root": row['root'],
+                            "Molecule": next_molecule_number,
+                            "Nucleotide Sequence": mutated_sequence,
+                            "Type": 'error',
+                            "Edit Distance": levenshtein(sequence, mutated_sequence),
+                            "amount": 1
+                        })
+                        next_molecule_number += 1
+                    else:  # No error introduced
+                        # Add to old representation
+                        old_rows.append({
+                            "root": row['root'],
+                            "Molecule": next_molecule_number,
+                            "Nucleotide Sequence": sequence,
+                            "Type": row['Type'],
+                            "Edit Distance": 0
+                        })
+                        # Increment amount in new representation
+                        self.df_new.at[index, 'amount'] += 1
 
-                self.df.at[index, 'amount'] = new_amount
+            # Update old DataFrame
+            self.df_old = pd.concat([self.df_old, pd.DataFrame(old_rows)], ignore_index=True)
 
+            # Add new rows to new DataFrame
             if new_rows:
-                self.df = pd.concat([self.df, pd.DataFrame(new_rows)], ignore_index=True)
+                self.df_new = pd.concat([self.df_new, pd.DataFrame(new_rows)], ignore_index=True)
 
-            print(f"Cycle {cycle + 1} complete. DataFrame now has {len(self.df)} rows.")
-        self.df['Molecule'] = range(1, len(self.df) + 1)
-        self.df.to_csv(output_filename, index=False)
-        print(f"File '{output_filename}' has been created with {len(self.df)} rows.")
+            print(f"Cycle {cycle + 1} complete. Old DataFrame now has {len(self.df_old)} rows, New DataFrame has {len(self.df_new)} rows.")
+
+    def save_results(self, old_filename='amplified_UMIs_old.csv', new_filename='amplified_UMIs_new.csv'):
+        # Count occurrences of each unique sequence
+        sequence_counts = self.df_old['Nucleotide Sequence'].value_counts()
+
+        # Create a new DataFrame for collapsed sequences
+        collapsed_df = (
+            self.df_old
+            .drop_duplicates(subset=['Nucleotide Sequence'])  # Keep only the first occurrence of each sequence
+            .copy()  # Avoid modifying the original DataFrame
+        )
+
+        # Add the "amount" column with the count of occurrences for each sequence
+        collapsed_df['amount'] = collapsed_df['Nucleotide Sequence'].map(sequence_counts)
+        collapsed_df.to_csv(old_filename, index=False)
+        self.df_new.to_csv(new_filename, index=False)
+        print(f"Results saved to '{old_filename}' and '{new_filename}'.")
 
     def PCR_analyze(self):
-        if self.df is not None:
-            unique_molecule_numbers = self.df['Molecule'].nunique()
+        if self.df_old is not None:
+            unique_molecule_numbers = self.df_old['Molecule'].nunique()
             print(f"Number of unique Molecule numbers: {unique_molecule_numbers}")
         else:
             print("Error: True UMIs have not been created yet.")
@@ -120,22 +157,45 @@ class simPCR:
 
 class Denoiser:
     def __init__(self, csv_file=None):
-        self.df = pd.read_csv(csv_file) if csv_file else None
+        if csv_file:
+            self.df = pd.read_csv(csv_file)  # Load DataFrame from CSV if provided
+        else:
+            self.df = None  # Initialize an empty DataFrame
 
     def simple(self, threshold):
         if self.df is None:
             print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
 
-        # Filter the DataFrame based on the threshold
-        valid_sequences_df = self.df.loc[self.df['amount'] >= threshold]
+        # Count appearances of each sequence
+        sequence_counts = self.df['Nucleotide Sequence'].value_counts()
 
-        # Save the filtered DataFrame to a CSV file
-        valid_sequences_df.to_csv('simple_result.csv', index=False)
-        print(f"Enhanced results saved to 'simple_result.csv' with {len(valid_sequences_df)} rows.")
+        # Fetch all sequences that appear 'threshold' times or more
+        valid_sequences = sequence_counts[sequence_counts >= threshold].index
 
-        # Return the filtered DataFrame
-        return valid_sequences_df
+        # Filter the DataFrame to keep only rows with valid sequences
+        filtered_df = self.df[self.df['Nucleotide Sequence'].isin(valid_sequences)]
+
+        # Collapse rows into one per unique molecule, aggregating the other columns
+        collapsed_df = filtered_df.groupby(['Molecule']).agg({
+            'Nucleotide Sequence': 'first',  # Choose the first occurrence
+            'Type': 'first',  # Choose the first occurrence
+            'Edit Distance': 'first'
+        }).reset_index()
+
+        # Output the collapsed DataFrame to 'simple_denoiser_result_enhanced.csv'
+        collapsed_df.to_csv('simple_result_enhanced.csv', index=False)
+        print(f"Enhanced results saved to 'simple_result_enhanced.csv' with {len(collapsed_df)} rows.")
+
+        # Create another DataFrame for the simple result with a new 'Molecule' column
+        simple_result_df = collapsed_df.copy()
+        simple_result_df['Molecule'] = range(1, len(simple_result_df) + 1)  # Generate new molecule numbers
+
+        # Output the simple result to 'simple_denoiser_result.csv'
+        simple_result_df[['Molecule', 'Nucleotide Sequence']].to_csv('simple_result.csv', index=False)
+        print(f"Simple results saved to 'simple_result.csv' with {len(simple_result_df)} rows.")
+
+        return collapsed_df.reset_index(drop=True)  # Return the collapsed DataFrame
 
     def directional_networks(self, show=3):
         """
@@ -159,24 +219,29 @@ class Denoiser:
             print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
 
-        # Ensure all rows are considered for nodes
-        unique_rows = self.df.drop_duplicates(subset=['Molecule'])
-        unique_molecules = len(unique_rows)
+        # Count occurrences of each Molecule
+        count_df = self.df['Molecule'].value_counts().reset_index()
+        count_df.columns = ['Molecule', 'amount']
+
+        # Merge the count back into the original DataFrame
+        merged_df = pd.merge(self.df, count_df, on='Molecule')
+        merged_df.to_csv('amplified_UMIs_old.csv', index=False)
+
+        # Keep only the first occurrence of each Molecule
+        result_df = merged_df.drop_duplicates(subset=['Molecule'])
+        unique_molecules = len(result_df)
         print(f"Number of unique molecules before denoising: {unique_molecules}")
 
         # Initialize the "before" graph
         before_graph = nx.Graph()
 
-        # Step 1: Add all nodes to the graph
-        for i, row in unique_rows.iterrows():
-            before_graph.add_node(f"{row['Nucleotide Sequence']}",
-                                  sequence=row['Nucleotide Sequence'],
-                                  amount=row['amount'],
-                                  molecule=row['Molecule'])
-
-        # Step 2: Add edges based on the condition
-        for i, row_a in unique_rows.iterrows():
-            for j, row_b in unique_rows.iterrows():
+        # Add nodes and edges to the "before" graph
+        for i, row_a in result_df.iterrows():
+            before_graph.add_node(f"{row_a['Nucleotide Sequence']}",
+                                  sequence=row_a['Nucleotide Sequence'],
+                                  amount=row_a['amount'],
+                                  molecule=row_a['Molecule'])
+            for j, row_b in result_df.iterrows():
                 if i != j:  # Prevent self-loops
                     value_a = row_a['amount']
                     value_b = row_b['amount']
@@ -251,6 +316,7 @@ class Denoiser:
                 # Append the result
                 central_nodes_data.append({
                     'Sequence': sequence,
+                    'Central node ID': central_node_id,
                     'Central node count': central_node_amount,
                     'Network nodes count': total_amount
                 })
@@ -297,32 +363,25 @@ class Denoiser:
             true_umis = true_umis_file
 
         amplified_umis = pd.read_csv(amplified_umis_file)
+
         # Detect sequence columns in all DataFrames
         sequence_col_denoised = detect_sequence_column(denoised_results)
         sequence_col_true = detect_sequence_column(true_umis)
         sequence_col_amplified = detect_sequence_column(amplified_umis)
-
-        print(sequence_col_true, sequence_col_denoised, sequence_col_amplified)
 
         # Extract sequences from the detected columns
         sequences_denoised = set(denoised_results[sequence_col_denoised])
         sequences_true = set(true_umis[sequence_col_true])
         sequences_amplified = set(amplified_umis[sequence_col_amplified])
 
-        # Calculate sets for confusion matrix components
-        true_positives = sequences_denoised.intersection(sequences_true)  # In denoised results and true UMIs
-        false_negatives = sequences_true - sequences_denoised  # In true UMIs but not in denoised results
-        false_positives = sequences_denoised - sequences_true  # In denoised results but not in true UMIs
-        true_negatives = sequences_amplified - sequences_denoised - sequences_true  # Not in denoised or true UMIs but in amplified UMIs
-
-        # Calculate counts
-        tp = len(true_positives)
-        fn = len(false_negatives)
-        fp = len(false_positives)
-        tn = len(true_negatives)
+        # Calculate confusion matrix components
+        tp = len(sequences_denoised.intersection(sequences_true))  # True Positives
+        tn = len(sequences_amplified - sequences_denoised - sequences_true)  # True Negatives
+        fp = len(sequences_denoised - sequences_true)  # False Positives
+        fn = len(sequences_true - sequences_denoised)  # False Negatives
 
         # Create the confusion matrix
-        cm = [[tp, fp], [fn, tn]]
+        cm = [[tp, fn], [fp, tn]]
 
         # Visualize the confusion matrix
         sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Actual Positives", "Actual Negatives"],
