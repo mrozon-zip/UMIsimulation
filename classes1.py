@@ -1,10 +1,9 @@
-import pandas as pd
-import random
-from polyleven import levenshtein
 import networkx as nx
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import pandas as pd
+import random
+from polyleven import levenshtein
 
 class simPCR:
     def __init__(self, length, number_of_rows):
@@ -15,89 +14,106 @@ class simPCR:
     def create_true_UMIs(self, output_filename='true_UMIs.csv'):
         # Generate random nucleotide sequences
         nucleotides = ['A', 'C', 'G', 'T']
-        sequences = set()
+        sequences = set()  # Use a set to ensure uniqueness
 
         while len(sequences) < self.number_of_rows:
             sequence = ''.join(random.choices(nucleotides, k=self.length))
-            sequences.add(sequence)
+            sequences.add(sequence)  # Add sequence to the set
 
-        self.df = pd.DataFrame({'Nucleotide Sequence': list(sequences)})
+        # Convert the set to a list for DataFrame creation
+        sequences = list(sequences)
+
+        # Create a DataFrame with sequences
+        self.df = pd.DataFrame(sequences, columns=['Nucleotide Sequence'])
+
+        # Assign molecule numbers from 1 to the number_of_rows to each sequence
         self.df['Molecule'] = range(1, self.number_of_rows + 1)
+
+        # Initialize the 'root', 'Type', 'Edit Distance', and 'amount' columns
+        self.df['root'] = self.df['Molecule'].astype(str)
         self.df['Type'] = 'original'
         self.df['Edit Distance'] = 0
-        self.df['amount'] = 1  # Initialize all molecules with count of 1
+        self.df['amount'] = 1
 
+        # Save the resulting DataFrame
         self.df.to_csv(output_filename, index=False)
-        print(f"File '{output_filename}' created with {self.number_of_rows} unique rows and sequence length of {self.length}.")
+        print(f"File '{output_filename}' has been created with {self.number_of_rows} unique rows and sequence length of {self.length}.")
 
-    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles,
-                            output_filename='amplified_UMIs.csv'):
+    def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles, output_filename='amplified_UMIs.csv'):
         if self.df is None:
             print("Error: True UMIs have not been created yet.")
             return
 
-        def random_errors(sequence, error_rate, error_types):
+        def introduce_errors(sequence, error_rate, error_types):
             nucleotides = ['A', 'C', 'G', 'T']
             sequence_list = list(sequence)
             i = 0
 
             while i < len(sequence_list):
                 if random.random() < error_rate:
-                    error_type_choice = random.choices(
+                    error_type = random.choices(
                         ['substitution', 'deletion', 'insertion'],
                         weights=[error_types['substitution'], error_types['deletion'], error_types['insertion']],
                         k=1
                     )[0]
 
-                    if error_type_choice == 'substitution':
+                    if error_type == 'substitution':
                         sequence_list[i] = random.choice([n for n in nucleotides if n != sequence_list[i]])
                         i += 1
-                    elif error_type_choice == 'deletion':
+
+                    elif error_type == 'deletion':
                         del sequence_list[i]
-                    elif error_type_choice == 'insertion':
-                        sequence_list.insert(i + 1, random.choice(nucleotides))
-                        i += 2
+
+                    elif error_type == 'insertion':
+                        sequence_list.insert(i, random.choice(nucleotides))
+                        i += 1
                 else:
                     i += 1
 
             return ''.join(sequence_list)
 
         for cycle in range(amplification_cycles):
+            original_df = self.df.copy()
             new_rows = []
-            for _, row in self.df.iterrows():
-                sequence = row['Nucleotide Sequence']
-                molecule = row['Molecule']
-                type_value = row['Type']
 
-                for _ in range(row['amount']):
-                    if random.random() < amplification_probability:
-                        mutated_sequence = random_errors(sequence, error_rate, error_types)
-                        if mutated_sequence != sequence:
-                            edit_distance = levenshtein(sequence, mutated_sequence)
-                            new_rows.append({
-                                'Nucleotide Sequence': mutated_sequence,
-                                'Molecule': molecule,
-                                'Type': 'error',
-                                'Edit Distance': edit_distance,
-                                'amount': 1
-                            })
-                        else:
-                            row['amount'] += 1  # Increment amount if no error occurs
+            for index, row in original_df.iterrows():
+                if random.random() > amplification_probability:
+                    continue
 
-            # Update the DataFrame with the new rows and modified "amount"
-            self.df = pd.concat([self.df, pd.DataFrame(new_rows)], ignore_index=True)
+                initial_amount = row['amount']
+                new_amount = initial_amount
 
-            # Print sum of the "amount" column
-            total_amount = self.df['amount'].sum()
-            print(f"Cycle {cycle + 1} complete. Total amount of sequences: {total_amount}")
+                for _ in range(initial_amount):
+                    sequence = row['Nucleotide Sequence']
+                    mutated_sequence = introduce_errors(sequence, error_rate, error_types)
+                    changes_made = mutated_sequence != sequence
 
+                    if changes_made:
+                        new_rows.append({
+                            "root": row['Molecule'],
+                            "Molecule": self.df['Molecule'].max() + 1,
+                            "Nucleotide Sequence": mutated_sequence,
+                            "Type": 'error' if row['Type'] == 'original' else row['Type'],
+                            "Edit Distance": levenshtein(sequence, mutated_sequence),
+                            "amount": initial_amount
+                        })
+                    else:
+                        new_amount += 1
+
+                self.df.at[index, 'amount'] = new_amount
+
+            if new_rows:
+                self.df = pd.concat([self.df, pd.DataFrame(new_rows)], ignore_index=True)
+
+            print(f"Cycle {cycle + 1} complete. DataFrame now has {len(self.df)} rows.")
+        self.df['Molecule'] = range(1, len(self.df) + 1)
         self.df.to_csv(output_filename, index=False)
-        print(f"File '{output_filename}' created with {len(self.df)} rows.")
+        print(f"File '{output_filename}' has been created with {len(self.df)} rows.")
 
     def PCR_analyze(self):
         if self.df is not None:
-            total_sequences = self.df['amount'].sum()
-            print(f"Total molecules after amplification: {total_sequences}")
+            unique_molecule_numbers = self.df['Molecule'].nunique()
+            print(f"Number of unique Molecule numbers: {unique_molecule_numbers}")
         else:
             print("Error: True UMIs have not been created yet.")
 
@@ -111,19 +127,15 @@ class Denoiser:
             print("Error: DataFrame is not initialized. Please provide a CSV file.")
             return None
 
-        sequence_counts = self.df.groupby('Nucleotide Sequence')['amount'].sum()
-        valid_sequences = sequence_counts[sequence_counts >= threshold].index
+        # Filter the DataFrame based on the threshold
+        valid_sequences_df = self.df.loc[self.df['amount'] >= threshold]
 
-        filtered_df = self.df[self.df['Nucleotide Sequence'].isin(valid_sequences)]
-        collapsed_df = filtered_df.groupby(['Nucleotide Sequence', 'Molecule']).agg({
-            'Type': 'first',
-            'Edit Distance': 'first',
-            'amount': 'sum'
-        }).reset_index()
+        # Save the filtered DataFrame to a CSV file
+        valid_sequences_df.to_csv('simple_result.csv', index=False)
+        print(f"Enhanced results saved to 'simple_result.csv' with {len(valid_sequences_df)} rows.")
 
-        collapsed_df.to_csv('simple_result_enhanced.csv', index=False)
-        print(f"Enhanced results saved to 'simple_result_enhanced.csv' with {len(collapsed_df)} rows.")
-        return collapsed_df
+        # Return the filtered DataFrame
+        return valid_sequences_df
 
     def directional_networks(self, show=3):
         if self.df is None:

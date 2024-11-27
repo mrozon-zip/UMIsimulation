@@ -1,5 +1,5 @@
-from classes import Denoiser
-from classes import simPCR
+from classes1 import Denoiser
+from classes1 import simPCR
 
 # Example usage
 simulator = simPCR(length=12, number_of_rows=100)
@@ -9,7 +9,7 @@ error_types = {
     'deletion': 0.2,      # 20% chance of deletion
     'insertion': 0.2      # 20% chance of insertion
 }
-simulator.amplify_with_errors(amplification_probability=1, error_rate=0, error_types=error_types, amplification_cycles=8)
+simulator.amplify_with_errors(amplification_probability=0.9, error_rate=0.002, error_types=error_types, amplification_cycles=8)
 simulator.PCR_analyze()
 
 # Create an instance of the Denoiser class
@@ -19,7 +19,7 @@ denoiser = Denoiser(csv_file='amplified_UMIs.csv')
 true_umis_file = "true_UMIs.csv"
 
 method = 1
-do_denoising = False
+do_denoising = True
 
 if do_denoising == True:
     print("I am denoising")
@@ -27,7 +27,7 @@ if do_denoising == True:
     if method == 0:
         denoised_file = "simple_result.csv"
         # Set a threshold for filtering sequences
-        threshold_value = 63  # Example threshold
+        threshold_value = 150  # Example threshold
 
         # Apply the simple denoising method with the specified threshold
         filtered_results = denoiser.simple(threshold_value)
