@@ -227,7 +227,6 @@ class Denoiser:
 
         # Merge the count back into the original DataFrame
         merged_df = pd.merge(self.df, count_df, on='Molecule')
-        merged_df.to_csv('amplified_UMIs_old.csv', index=False)
 
         # Keep only the first occurrence of each Molecule
         result_df = merged_df.drop_duplicates(subset=['Molecule'])

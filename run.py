@@ -1,7 +1,7 @@
 from classes import Denoiser
 from classes import simPCR
 
-do_simulation = False
+do_simulation = True
 
 if do_simulation == True:
     # Example usage
@@ -12,7 +12,7 @@ if do_simulation == True:
         'deletion': 0.2,      # 20% chance of deletion
         'insertion': 0.2      # 20% chance of insertion
     }
-    simulator.amplify_with_errors(amplification_probability=0.9, error_rate=0.0005, error_types=error_types, amplification_cycles=8)
+    simulator.amplify_with_errors(amplification_probability=0.9, error_rate=0.004, error_types=error_types, amplification_cycles=8)
     simulator.PCR_analyze()
 elif do_simulation == False:
     print("Omiting simulation")
@@ -48,7 +48,7 @@ if do_denoising == True:
     elif method == 1:
 
         # Step 1: Run the directional_networks method to create networks
-        before_graph, after_graph, unique_molecules = denoiser.directional_networks(show=2)
+        before_graph, after_graph, unique_molecules = denoiser.directional_networks(show=0)
 
         # Step 2: Use the networks_resolver method to analyze central nodes in the networks
         central_nodes_df = denoiser.networks_resolver(after_graph, toggle="central_node")
