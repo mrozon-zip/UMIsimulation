@@ -1,5 +1,5 @@
 import seaborn as sns
-from classes4 import Denoiser, SimPcr
+from classes import Denoiser, SimPcr
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import time

@@ -1,4 +1,4 @@
-from classes import Denoiser
+from classes5 import Denoiser
 import pandas as pd
 
 denoiser = Denoiser(csv_file='amplified_UMIs.csv')
