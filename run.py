@@ -1,5 +1,5 @@
-from classes4 import Denoiser
-from classes4 import SimPcr
+from classes import Denoiser
+from classes import SimPcr
 
 do_simulation = True
 
