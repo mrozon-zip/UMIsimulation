@@ -9,3 +9,4 @@ true_UMIs = pd.read_csv("true_UMIs.csv")
 print(true_UMIs.iloc[:, 2])
 
 denoiser.analysis(denoiser_results, true_UMIs, col1=0, col2=2)
+#

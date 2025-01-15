@@ -3,7 +3,7 @@ import pandas as pd
 import scipy as sp
 
 df = pd.read_csv("amplified_UMIs.csv")
-
+#
 n_cycles = 12
 efficiency = 0.9
 error_rate = 0.0001

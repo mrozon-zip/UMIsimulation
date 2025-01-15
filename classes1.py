@@ -6,7 +6,7 @@ import random
 from polyleven import levenshtein
 
 random.seed(42)
-
+#
 class simPCR:
     def __init__(self, length, number_of_rows):
         self.length = length

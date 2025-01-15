@@ -18,7 +18,7 @@ if do_simulation:
                                   amplification_cycles=10)
 elif not do_simulation:
     print("Omitting simulation")
-
+#
 # Create an instance of the Denoiser class
 denoiser = Denoiser(csv_file='amplified_UMIs.csv')
 

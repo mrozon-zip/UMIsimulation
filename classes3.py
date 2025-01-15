@@ -210,7 +210,7 @@ class Denoiser:
           1 - Show "before" graph only.
           2 - Show "after" graph only.
           3 - Show both graphs (default).
-
+        #
         Returns:
         - before_graph: The graph before edge filtering by edit distance.
         - after_graph: The graph after edge filtering by edit distance.
