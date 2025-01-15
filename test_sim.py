@@ -1,10 +1,10 @@
-from classes3 import simPCR
+from classes3 import SimPcr
 
 do_simulation = True
 
 if do_simulation == True:
     # Example usage
-    simulator = simPCR(length=12, number_of_rows=100)
+    simulator = SimPcr(length=12, number_of_rows=100)
     simulator.create_true_UMIs()
     error_types = {
         'substitution': 0.6,  # 60% chance of substitution

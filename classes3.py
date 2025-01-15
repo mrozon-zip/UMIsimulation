@@ -7,13 +7,14 @@ import seaborn as sns
 
 random.seed(42)
 
-class simPCR:
+
+class SimPcr:
     def __init__(self, length, number_of_rows):
         self.length = length
         self.number_of_rows = number_of_rows
         self.df = None  # DataFrame to store the UMIs
 
-    def create_true_UMIs(self, output_filename='true_UMIs.csv'):
+    def create_true_umis(self, output_filename='true_UMIs.csv'):
         nucleotides = ['A', 'C', 'G', 'T']
         sequences = set()
 
@@ -30,7 +31,8 @@ class simPCR:
         self.df.to_csv(output_filename, index=False)
         print(f"File '{output_filename}' created with {self.number_of_rows} unique rows.")
 
-    def save_duplicates_with_revert_and_cross_info(self, df, true_umis_file,
+    @staticmethod
+    def save_duplicates_with_revert_and_cross_info(df, true_umis_file,
                                                    output_filename='reverting_and_cross_duplicates.csv'):
         # Read the true_UMIs file
         true_umis_df = pd.read_csv(true_umis_file)
@@ -98,7 +100,6 @@ class simPCR:
     def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles,
                             output_filename='amplified_UMIs.csv'):
         df_new = self.df.copy()  # Initialize from the original UMI DataFrame
-
 
         def random_errors(sequence):
             nucleotides = ['A', 'C', 'G', 'T']
@@ -177,6 +178,7 @@ class simPCR:
         df_new.to_csv(output_filename, index=False)
         print(f"File '{output_filename}' created with {len(df_new)} rows.")
 
+
 class Denoiser:
     def __init__(self, csv_file=None):
         self.df = pd.read_csv(csv_file) if csv_file else None
@@ -219,7 +221,7 @@ class Denoiser:
             return None
 
         # Ensure all rows are considered for nodes
-        # possibly repeated step since it exists in the amplify with errors.
+        # possibly repeated step since it exists in the "amplify with errors".
         unique_rows = self.df.drop_duplicates(subset=['Nucleotide Sequence'])
         unique_molecules = len(unique_rows)
         print(f"Number of unique molecules before denoising: {unique_molecules}")
@@ -280,7 +282,8 @@ class Denoiser:
 
         return before_graph, after_graph, unique_molecules
 
-    def networks_resolver(self, graph, toggle="central_node"):
+    @staticmethod
+    def networks_resolver(graph, toggle="central_node"):
         """
         Resolve networks in different ways based on the toggle parameter.
 
@@ -325,7 +328,8 @@ class Denoiser:
             print(f"Toggle '{toggle}' is not implemented.")
             return None
 
-    def analysis(self, denoised_file, true_umis_file, amplified_umis_file="amplified_UMIs.csv"):
+    @staticmethod
+    def analysis(denoised_file, true_umis_file, amplified_umis_file="amplified_UMIs.csv"):
         """
         Analyze the overlap between denoised_results and true_umis and produce a confusion matrix.
 
@@ -373,7 +377,8 @@ class Denoiser:
         true_positives = sequences_denoised.intersection(sequences_true)  # In denoised results and true UMIs
         false_negatives = sequences_true - sequences_denoised  # In true UMIs but not in denoised results
         false_positives = sequences_denoised - sequences_true  # In denoised results but not in true UMIs
-        true_negatives = sequences_amplified - sequences_denoised - sequences_true  # Not in denoised or true UMIs but in amplified UMIs
+        true_negatives = sequences_amplified - sequences_denoised - sequences_true  # Not in denoised or true UMIs but
+        # in amplified UMIs
 
         # Calculate counts
         tp = len(true_positives)
@@ -390,7 +395,6 @@ class Denoiser:
         plt.title("Confusion Matrix")
         plt.xlabel("Actual")
         plt.ylabel("Predicted")
-        plt.show()
 
         # Display results
         print(f"True Positives (TP): {tp}")
@@ -406,7 +410,8 @@ class Denoiser:
             "False Negatives": fn
         }
 
-    def node_probe(self, graph, tier1=5, tier2=3):
+    @staticmethod
+    def node_probe(graph, tier1=5, tier2=3):
         """
         Draws a subgraph centered on a randomly selected node with at least `tier1` connections.
         The subgraph includes tier-1 connections and up to `tier2` random tier-2 connections.

@@ -1,20 +1,23 @@
-from classes3 import Denoiser
-from classes3 import simPCR
+from classes4 import Denoiser
+from classes4 import SimPcr
 
 do_simulation = True
 
-if do_simulation == True:
+if do_simulation:
     # Example usage
-    simulator = simPCR(length=12, number_of_rows=100)
-    simulator.create_true_UMIs()
+    simulator = SimPcr(length=24, number_of_rows=100)
+    simulator.create_true_umis()
     error_types = {
         'substitution': 0.6,  # 60% chance of substitution
         'deletion': 0.2,      # 20% chance of deletion
         'insertion': 0.2      # 20% chance of insertion
     }
-    simulator.amplify_with_errors(amplification_probability=0.9, error_rate=0.001, error_types=error_types, amplification_cycles=10)
-elif do_simulation == False:
-    print("Omiting simulation")
+    simulator.amplify_with_errors(amplification_probability=0.9,
+                                  error_rate=0.0001,
+                                  error_types=error_types,
+                                  amplification_cycles=10)
+elif not do_simulation:
+    print("Omitting simulation")
 
 # Create an instance of the Denoiser class
 denoiser = Denoiser(csv_file='amplified_UMIs.csv')
@@ -25,7 +28,7 @@ true_umis_file = "true_UMIs.csv"
 method = 1
 do_denoising = True
 
-if do_denoising == True:
+if do_denoising:
     print("I am denoising")
     # simple
     if method == 0:
@@ -47,7 +50,7 @@ if do_denoising == True:
     elif method == 1:
 
         # Step 1: Run the directional_networks method to create networks
-        before_graph, after_graph, unique_molecules = denoiser.directional_networks(show=2)
+        before_graph, after_graph, unique_molecules = denoiser.directional_networks(show=0)
 
         # Step 2: Use the networks_resolver method to analyze central nodes in the networks
         central_nodes_df = denoiser.networks_resolver(after_graph, toggle="central_node")
@@ -60,5 +63,5 @@ if do_denoising == True:
         # Call the analysis method
         denoiser.analysis(denoised_file, true_umis_file)
 
-elif do_denoising == False:
+elif not do_denoising:
     print("I am waiting")
