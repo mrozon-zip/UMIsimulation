@@ -26,8 +26,6 @@ class SimPcr:
                 'Sequence': sequence,
                 'edit distance': 0,
                 'amount': 1,
-                'type': 'original',
-                'molecule': idx + 1
             }
             for idx, sequence in enumerate(sequences)
         ]
@@ -39,62 +37,6 @@ class SimPcr:
             writer.writerows(self.data)
 
         print(f"File '{output_filename}' created with {self.number_of_rows} unique rows.")
-
-    @staticmethod
-    def save_duplicates(data, true_umis_file, output_filename='duplicates.csv'):
-        # Read true_UMIs and create a lookup dictionary
-        true_umis_dict = {}
-        with open(true_umis_file, mode='r') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                true_umis_dict[int(row['molecule'])] = row['Sequence']
-
-        structured_rows = []
-
-        # Find duplicates
-        sequence_groups = {}
-        for row in data:
-            seq = row['Sequence']
-            if seq not in sequence_groups:
-                sequence_groups[seq] = []
-            sequence_groups[seq].append(row)
-
-        for seq, group in sequence_groups.items():
-            if len(group) > 1:
-                original = group[0]
-                structured_rows.append({
-                    'Description': 'Original',
-                    'True UMI Sequence': original['Sequence'],
-                    **original
-                })
-
-                for duplicate in group[1:]:
-                    molecule = duplicate['molecule']
-                    duplicate_sequence = duplicate['Sequence']
-                    duplicate_type = duplicate['type']
-                    true_umi_sequence = true_umis_dict.get(molecule, 'N/A')
-
-                    if duplicate_sequence == true_umi_sequence and duplicate_type.startswith('error'):
-                        description = 'Revert Duplicate 1st Degree'
-                    elif any(d['Sequence'] == duplicate_sequence for d in group):
-                        description = 'Revert Duplicate 2nd Degree'
-                    else:
-                        description = 'Other Duplicate'
-
-                    structured_rows.append({
-                        'Description': description,
-                        'True UMI Sequence': true_umi_sequence,
-                        **duplicate
-                    })
-
-        # Save duplicates to a CSV file
-        with open(output_filename, mode='w', newline='') as file:
-            fieldnames = structured_rows[0].keys()
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(structured_rows)
-
-        print(f"Reverting and cross-lineage duplicates saved to '{output_filename}'.")
 
     def amplify_with_errors(self, amplification_probability, error_rate, error_types, amplification_cycles,
                             output_filename='amplified_UMIs.csv'):

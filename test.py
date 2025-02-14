@@ -7,8 +7,8 @@ from itertools import product
 import csv
 
 # Parameters to iterate over
-pcr_cycles = [10, 15]
-barcode_lengths = [12, 24, 36]
+pcr_cycles = [10]
+barcode_lengths = [12]
 pcr_efficiencies = [0.85]
 error_probabilities = [0.0001]
 initial_barcodes = [200]
@@ -78,7 +78,7 @@ with PdfPages(output_pdf) as pdf:
             denoiser.networks_resolver(after_graph, toggle="central_node")
             denoised_file = "directional_results.csv"
         elif method == "simple":
-            threshold_value = 150
+            threshold_value = 300
             denoiser.simple(threshold_value)
             denoised_file = "simple_result.csv"
         else:
