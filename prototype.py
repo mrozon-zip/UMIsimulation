@@ -14,7 +14,7 @@ import random
 import math
 import logging
 import os
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -158,7 +158,7 @@ def pcr_amplification(sequences: List[Dict[str, any]],
         sequences.extend(new_sequences)
         new_total = sum(seq['N0'] for seq in sequences)
         delta_N = new_total - current_N
-        remaining_substrate = max(0, remaining_substrate - delta_N)     # if delta_N > remaining_substrate then remaining substrate = 0
+        remaining_substrate = max(0, remaining_substrate - delta_N)
         total_sequences_history.append(len(sequences))
         logging.info(f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}")
     if plot:
@@ -173,121 +173,206 @@ def pcr_amplification(sequences: List[Dict[str, any]],
 
 
 def bridge_amplification(sequences: List[Dict[str, any]],
-                         cycles: int,
                          mutation_rate: float,
                          mutation_probabilities: Dict[str, float],
-                         S_area: float,
+                         substrate_capacity_initial: float,
+                         S_radius: float,
+                         AOE_radius: float,
                          density: float,
                          success_prob: float,
-                         deviation: float,
-                         plot: bool) -> Tuple[List[Dict[str, any]], List[int], List[int]]:
+                         deviation: float,) -> list[dict[str, Any] | dict[str, str | int]]:
     """
-    Perform Bridge amplification using a global pool of P points.
-
-    Parameters:
-      - sequences: List of input sequences (each with keys 'sequence' and 'N0').
-      - cycles: Maximum number of cycles to simulate.
-      - mutation_rate: Mutation rate per replication event.
-      - mutation_probabilities: Dictionary with keys 'substitution', 'deletion', 'insertion'.
-      - S_area: Total area of the flow cell (used to compute the global pool of P points).
-      - density: Density of P points per unit area.
-      - success_prob: Base replication success probability.
-      - deviation: Fractional deviation to apply to success_prob per sequence.
-      - plot: Whether to show a plot of total unique sequences per cycle and remaining P points.
-
-    Process:
-      1. Compute the global pool: global_P = int(density * S_area)
-      2. For each cycle, for each sequence and for each of its copies (N0), if global_P > 0:
-           - Attempt replication using the sequence’s effective success probability.
-           - Consume one P point per replication event.
-           - If replication occurs:
-               - Process mutation: if a mutation occurs, add a new sequence (with N0=1) to the dataset.
-                 Otherwise, increment the parent's N0.
-      3. Continue cycles until global_P is exhausted or no replication occurs in a cycle.
-      4. Record and plot the remaining global P points in each cycle.
-
-    Returns:
-      - Updated list of sequences.
-      - A history list recording the total number of unique sequences per cycle.
-      - A history list recording the remaining global P points per cycle.
+    Perform Bridge amplification simulation.
+    Each cycle applies a random deviation (±10% by default) to parameters S, density, and success probability.
+    The effective success probability (after deviation) is used as the chance for amplification.
+    Mutation processing and substrate capacity updating are handled similarly to PCR.
+    Returns the final sequence list and a history of total unique sequences per cycle.
     """
-    # Compute global pool of P points (fixed for the simulation)
-    global_P = int(density * S_area)
-    logging.info(f"Global pool of P points: {global_P}")
+    total_sequences_history = []
+    remaining_substrate = substrate_capacity_initial
 
-    # Initialize effective success probability for each input sequence if not already assigned.
-    for seq in sequences:
-        if 'effective_success_prob' not in seq:
-            # Assign effective success probability with deviation.
-            seq['effective_success_prob'] = min(success_prob * (1 + random.uniform(-deviation, deviation)), 1.0)
+    simulation_index = 0  # To track which simulation we're in
+    all_cycle_counts = []  # To store cycle counts list from each simulation
+    merged_sequences = []  # To accumulate A_points_dict values from all simulations
 
-    seq_history = []  # Total unique sequences per cycle.
-    P_history = []  # Global P points remaining per cycle.
-    cycle = 0
+    for seq_dict in sequences:
+        # Calculating parameters for every sequence
+        effective_S_radius = S_radius * (1 + random.uniform(-deviation, deviation))
+        effective_density = density * (1 + random.uniform(-deviation, deviation))
+        effective_S = math.pi * effective_S_radius ** 2
+        num_P = int(effective_density * effective_S)
+        effective_success_prob = success_prob * (1 + random.uniform(-deviation, deviation))
+        effective_success_prob = min(effective_success_prob, 1.0)
+        effective_AOE_radius = AOE_radius * (1 + random.uniform(-deviation, deviation))
 
-    # Loop over cycles until global P points are exhausted or maximum cycles reached.
-    while global_P > 0 and cycle < cycles:
-        cycle += 1
-        replication_occurred = False
-        new_sequences = []  # To collect any mutated new sequences in this cycle
+        P_points = []
+        for i in range(num_P):
+            # Use polar coordinates to ensure a uniform distribution.
+            r = effective_S_radius * math.sqrt(random.random())
+            theta = random.uniform(0, 2 * math.pi)
+            x = r * math.cos(theta)
+            y = r * math.sin(theta)
+            P_points.append({'id': i, 'x': x, 'y': y})
+        global_P = P_points  # available P points
 
-        logging.info(f"Cycle {cycle} starting with {len(sequences)} sequences and global_P = {global_P}.")
+        # --- Define the A point class ---
+        class APoint:
+            def __init__(self, sequence, x, y):
+                self.sequence = sequence
+                self.x = x
+                self.y = y
+                self.active = True  # True while it finds available P's within its AOE
 
-        # For each sequence in the dataset:
-        for seq in sequences:
-            # We'll attempt replication for each copy of this sequence.
-            copies = seq['N0']
-            for i in range(copies):
-                if global_P <= 0:
-                    break  # No more available P points.
-                # Attempt replication event based on effective success probability.
-                if random.random() < seq['effective_success_prob']:
-                    global_P -= 1  # Consume one global P point.
-                    replication_occurred = True
-                    # Process mutation on the replication event.
-                    mutated_seq, mutation_occurred = process_mutation(seq['sequence'],
-                                                                      mutation_rate,
-                                                                      mutation_probabilities)
-                    if mutation_occurred:
-                        # If mutation occurs, add a new sequence with N0 = 1.
-                        new_seq = {
-                            'sequence': mutated_seq,
-                            'N0': 1,
-                            'effective_success_prob': min(success_prob * (1 + random.uniform(-deviation, deviation)),
-                                                          1.0)
-                        }
-                        new_sequences.append(new_seq)
+            def distance_to(self, p):
+                return math.hypot(self.x - p['x'], self.y - p['y'])
+
+        # --- Initialize with one A point at the center ---
+        A_points = []
+        # Here we initialize the simulation's local list with one dictionary taken from seq_dict.
+        local_seq_list = [{"sequence": seq_dict["sequence"], "N0": seq_dict["N0"]}]
+        initial_A = APoint(seq_dict["sequence"], 0, 0)
+        A_points.append(initial_A)
+        active_A = [initial_A]
+
+        # Initialize a list to track the total number of A_points at each cycle.
+        cycle_counts = []
+        cycle = 0
+
+        # --- For the first simulation only, set up the animation figure ---
+        if simulation_index == 0:
+            fig, ax = plt.subplots()
+
+        # --- Main simulation loop ---
+        while global_P and active_A:
+            # At the start of each cycle, record the current total number of A_points.
+            cycle_counts.append(len(A_points))
+
+            # For the first simulation, update the animation at the start of the cycle.
+            if simulation_index == 0:
+                ax.cla()
+                # Plot available P points as blue small dots.
+                p_x = [p['x'] for p in global_P]
+                p_y = [p['y'] for p in global_P]
+                ax.scatter(p_x, p_y, color='blue', s=5, label='P points')
+
+                # Plot all A points as red larger dots.
+                a_x = [a.x for a in A_points]
+                a_y = [a.y for a in A_points]
+                ax.scatter(a_x, a_y, color='red', s=10, label='A points')
+
+                # Draw the AOE for each active A point as a green transparent circle.
+                for a in active_A:
+                    circle = plt.Circle((a.x, a.y), effective_AOE_radius, color='green', alpha=0.3)
+                    ax.add_patch(circle)
+
+                ax.set_xlim(-effective_S_radius, effective_S_radius)
+                ax.set_ylim(-effective_S_radius, effective_S_radius)
+                ax.set_aspect('equal')
+                ax.legend(loc='upper right')
+                ax.set_title(f"Cycle {cycle}")
+                plt.pause(0.5)
+
+            # Each active A checks for at least one available P point within its AOE.
+            pending_A = {}
+            for a in active_A:
+                candidates = [p for p in global_P if a.distance_to(p) <= AOE_radius]
+                if not candidates:
+                    a.active = False  # Mark A as inactive if no candidate P is found.
+                else:
+                    pending_A[a.x] = a.x
+                    pending_A[a.y] = a.y
+
+            # Update active_A list.
+            active_A = [a for a in active_A if a.active]
+            if not active_A:
+                break
+
+            # Each active A (with candidates) tries to form a connection.
+            pending = set(active_A)
+            while pending:
+                # proposals: maps candidate P's id to a list of APoint instances that propose it.
+                proposals = {}
+                remove_from_pending = set()
+
+                # Each active A (in pending) looks for candidate P points within its AOE.
+                for a in list(pending):
+                    candidates = [p for p in global_P if a.distance_to(p) <= effective_AOE_radius]
+                    if not candidates:
+                        # No candidate found: remove this APoint from pending.
+                        remove_from_pending.add(a)
                     else:
-                        # If no mutation, increment the parent's copy count.
-                        seq['N0'] += 1
+                        # Randomly choose one candidate for a proposal.
+                        chosen = random.choice(candidates)
+                        proposals.setdefault(chosen['id'], []).append(a)
 
-        # Add any new mutated sequences to the main dataset.
-        if new_sequences:
-            sequences.extend(new_sequences)
+                # Remove those APoints that found no candidates.
+                pending -= remove_from_pending
+                if not proposals:
+                    break
 
-        seq_history.append(len(sequences))
-        P_history.append(global_P)
-        logging.info(
-            f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining global_P: {global_P}")
+                # Process each candidate P’s proposals.
+                for p_id, a_list in proposals.items():
+                    # Find the candidate P point (if it’s still available).
+                    p_obj = next((p for p in global_P if p['id'] == p_id), None)
+                    if p_obj is None:
+                        continue  # Already taken.
 
-        # If no replication occurred in this cycle, break the loop.
-        if not replication_occurred:
-            logging.info("No replication events occurred in this cycle. Ending simulation.")
-            break
+                    success_list = []
+                    # For each APoint proposing this candidate, check the connection probability.
+                    for a in a_list:
+                        if a in pending and random.random() < effective_success_prob:
+                            success_list.append(a)
 
-    if plot:
-        plt.figure(figsize=(10, 5))
-        cycles_range = range(1, len(seq_history) + 1)
-        plt.plot(cycles_range, seq_history, marker='o', label="Unique Sequences")
-        plt.plot(cycles_range, P_history, marker='s', label="Remaining Global P Points")
-        plt.xlabel("Cycle Number")
-        plt.ylabel("Count")
-        plt.title("Bridge Amplification: Unique Sequences and Remaining Global P Points per Cycle")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+                    if not success_list:
+                        # If none succeed, remove all these APoints from pending.
+                        for a in a_list:
+                            pending.discard(a)
+                    else:
+                        # If one or more succeed, choose a winner at random.
+                        winner = random.choice(success_list)
+                        mutated_seq, mutation_occurred = process_mutation(winner.sequence,
+                                                                          mutation_rate,
+                                                                          mutation_probabilities)
+                        local_seq_list.append({"sequence": mutated_seq, "N0": 1})
 
-    return sequences, seq_history, P_history
+                        # Create a new APoint using the winner's (possibly mutated) sequence and the candidate's location.
+                        new_A = APoint(mutated_seq, p_obj['x'], p_obj['y'])
+                        A_points.append(new_A)
+                        active_A.append(new_A)
+                        # Remove the candidate P from the available points.
+                        global_P = [p for p in global_P if p['id'] != p_id]
+                        # Remove all APoints that proposed this candidate from pending.
+                        for a in a_list:
+                            pending.discard(a)
+            # End proposals.
+            active_A = [a for a in A_points if a.active]
+            cycle += 1
+
+        # End of simulation for this seq_dict.
+        all_cycle_counts.append(cycle_counts)
+        print(f"Length of local_seq_list: {len(local_seq_list)}")
+        # --- Merge this simulation's local_seq_list into the global merged_sequences ---
+        for d in local_seq_list:
+            found = False
+            for md in merged_sequences:
+                if md["sequence"] == d["sequence"]:
+                    md["N0"] += d["N0"]
+                    found = True
+                    break
+            if not found:
+                merged_sequences.append(d)
+        print(f"Length of merged_sequences: {len(merged_sequences)}")
+        # For the first simulation, leave the final frame displayed.
+        if simulation_index == 0:
+            plt.show(block=False)
+
+        simulation_index += 1
+
+    # After processing all seq_dict in sequences, summarize the cycle counts.
+    # This performs an element-wise sum over all cycle_counts lists.
+    final_cycle_counts = [sum(x) for x in zip(*all_cycle_counts)]
+    sequences = merged_sequences
+    return sequences
 
 
 # Simplified denoiser class using parts of your provided code.
@@ -364,17 +449,18 @@ def main():
     amplify_parser.add_argument('--method', type=str, choices=['pcr', 'bridge', 'both'], required=True,
                                 help="Amplification method to use")
     amplify_parser.add_argument('--cycles', type=int, default=30, help="Number of amplification cycles")
-    amplify_parser.add_argument('--mutation_rate', type=float, default=0.001, help="Mutation rate per nucleotide per replication event")
+    amplify_parser.add_argument('--mutation_rate', type=float, default=0.01, help="Mutation rate per nucleotide per replication event")
     amplify_parser.add_argument('--substitution_prob', type=float, default=0.4, help="Probability of substitution mutation")
     amplify_parser.add_argument('--deletion_prob', type=float, default=0.3, help="Probability of deletion mutation")
     amplify_parser.add_argument('--insertion_prob', type=float, default=0.3, help="Probability of insertion mutation")
     amplify_parser.add_argument('--substrate_capacity', type=float, default=(2**18), help="Initial substrate capacity")
     amplify_parser.add_argument('--S', type=float, default=700_000_000, help="Threshold S parameter")
-    amplify_parser.add_argument('--S_area', type=float, default=5.0, help="S_area parameter for Bridge Amplification (used to compute available area for P points)")
+    amplify_parser.add_argument('--S_radius', type=float, default=10, help="Threshold S parameter")
+    amplify_parser.add_argument('--AOE_radius', type=float, default=1, help="Threshold S parameter")
     amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
-    amplify_parser.add_argument('--density', type=float, default=5, help="Density parameter for Bridge amplification")
+    amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
     amplify_parser.add_argument('--success_prob', type=float, default=0.85, help="Success probability for Bridge amplification")
-    amplify_parser.add_argument('--deviation', type=float, default=0.01, help="Deviation for Bridge amplification parameters (e.g., 0.1 for 10%)")
+    amplify_parser.add_argument('--deviation', type=float, default=0.1, help="Deviation for Bridge amplification parameters (e.g., 0.1 for 10%)")
     amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv', help="Input CSV filename with true barcodes")
     amplify_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)", default=True)
     amplify_parser.add_argument('--no_plot', dest='plot', action='store_false', help="Disable plotting")
@@ -437,25 +523,25 @@ def main():
         if args.method in ['bridge', 'both']:
             sequences_bridge = [dict(seq) for seq in sequences]
             logging.info("Starting Bridge amplification...")
-            sequences_bridge, history_bridge = bridge_amplification(
+            sequences_bridge = bridge_amplification(
                 sequences_bridge,
-                cycles=args.cycles,
                 mutation_rate=args.mutation_rate,
                 mutation_probabilities=mutation_probabilities,
-                S=args.S,
+                substrate_capacity_initial=args.substrate_capacity,
+                S_radius=args.S_radius,
+                AOE_radius=args.AOE_radius,
                 density=args.density,
                 success_prob=args.success_prob,
                 deviation=args.deviation,
-                plot=args.plot
             )
             bridge_output = 'bridge_amplified.csv'
-            with open(bridge_output, 'w', newline='') as f:
+            with open(bridge_output, 'w', newline='') as csvfile:
                 fieldnames = ['sequence', 'N0']
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                for seq in sequences_bridge:
-                    writer.writerow(seq)
-            logging.info(f"Bridge amplification complete. Results saved to {bridge_output}.")
+                for seq_dict in sequences:
+                    writer.writerow(seq_dict)
+            logging.info(f"Generated {len(sequences)} sequences and saved to {bridge_output}")
 
         if args.method == 'both' and args.plot:
             plt.figure()
