@@ -194,6 +194,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
     simulation_index = 0  # To track which simulation we're in
     all_cycle_counts = []  # To store cycle counts list from each simulation
     merged_sequences = []  # To accumulate A_points_dict values from all simulations
+    check = 0
 
     for seq_dict in sequences:
         # Calculating parameters for every sequence
@@ -333,8 +334,15 @@ def bridge_amplification(sequences: List[Dict[str, any]],
                         mutated_seq, mutation_occurred = process_mutation(winner.sequence,
                                                                           mutation_rate,
                                                                           mutation_probabilities)
-                        local_seq_list.append({"sequence": mutated_seq, "N0": 1})
+                        found = False
+                        for local_dict in local_seq_list:
+                            if local_dict["sequence"] == mutated_seq:
+                                local_dict["N0"] += 1
+                                found = True
+                                break
 
+                        if not found:
+                            local_seq_list.append({"sequence": mutated_seq, "N0": 1})
                         # Create a new APoint using the winner's (possibly mutated) sequence and the candidate's location.
                         new_A = APoint(mutated_seq, p_obj['x'], p_obj['y'])
                         A_points.append(new_A)
@@ -355,6 +363,9 @@ def bridge_amplification(sequences: List[Dict[str, any]],
         for d in local_seq_list:
             found = False
             for md in merged_sequences:
+                if check == 0:      # It is here to ensure that merged_sequences is empty at the start
+                    merged_sequences = []
+                    check = 1
                 if md["sequence"] == d["sequence"]:
                     md["N0"] += d["N0"]
                     found = True
@@ -368,11 +379,14 @@ def bridge_amplification(sequences: List[Dict[str, any]],
 
         simulation_index += 1
 
+
     # After processing all seq_dict in sequences, summarize the cycle counts.
     # This performs an element-wise sum over all cycle_counts lists.
-    final_cycle_counts = [sum(x) for x in zip(*all_cycle_counts)]
-    sequences = merged_sequences
-    return sequences
+    history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
+    print(type(history_bridge))
+    print(len(history_bridge))
+    print(f"Length of merged_sequences: {len(merged_sequences)}")
+    return merged_sequences, history_bridge
 
 
 # Simplified denoiser class using parts of your provided code.
@@ -523,7 +537,7 @@ def main():
         if args.method in ['bridge', 'both']:
             sequences_bridge = [dict(seq) for seq in sequences]
             logging.info("Starting Bridge amplification...")
-            sequences_bridge = bridge_amplification(
+            sequences_bridge_amp, history_bridge = bridge_amplification(
                 sequences_bridge,
                 mutation_rate=args.mutation_rate,
                 mutation_probabilities=mutation_probabilities,
@@ -539,9 +553,9 @@ def main():
                 fieldnames = ['sequence', 'N0']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
-                for seq_dict in sequences:
+                for seq_dict in sequences_bridge_amp:
                     writer.writerow(seq_dict)
-            logging.info(f"Generated {len(sequences)} sequences and saved to {bridge_output}")
+            logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
 
         if args.method == 'both' and args.plot:
             plt.figure()
