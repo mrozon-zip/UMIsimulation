@@ -173,6 +173,7 @@ def pcr_amplification(sequences: List[Dict[str, any]],
 
 
 def bridge_amplification(sequences: List[Dict[str, any]],
+                         simulate: bool,
                          mutation_rate: float,
                          mutation_probabilities: Dict[str, float],
                          substrate_capacity_initial: float,
@@ -180,7 +181,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
                          AOE_radius: float,
                          density: float,
                          success_prob: float,
-                         deviation: float,) -> list[dict[str, Any] | dict[str, str | int]]:
+                         deviation: float,) -> Tuple[List[Dict[str, any]], List[int]]:
     """
     Perform Bridge amplification simulation.
     Each cycle applies a random deviation (±10% by default) to parameters S, density, and success probability.
@@ -191,7 +192,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
     total_sequences_history = []
     remaining_substrate = substrate_capacity_initial
 
-    simulation_index = 0  # To track which simulation we're in
+    simulation_index = simulate  # To track which simulation we're in
     all_cycle_counts = []  # To store cycle counts list from each simulation
     merged_sequences = []  # To accumulate A_points_dict values from all simulations
     check = 0
@@ -240,7 +241,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
         cycle = 0
 
         # --- For the first simulation only, set up the animation figure ---
-        if simulation_index == 0:
+        if simulation_index == True:
             fig, ax = plt.subplots()
 
         # --- Main simulation loop ---
@@ -249,7 +250,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
             cycle_counts.append(len(A_points))
 
             # For the first simulation, update the animation at the start of the cycle.
-            if simulation_index == 0:
+            if simulation_index == True:
                 ax.cla()
                 # Plot available P points as blue small dots.
                 p_x = [p['x'] for p in global_P]
@@ -358,6 +359,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
 
         # End of simulation for this seq_dict.
         all_cycle_counts.append(cycle_counts)
+        print(all_cycle_counts[0:2])
         print(f"Length of local_seq_list: {len(local_seq_list)}")
         # --- Merge this simulation's local_seq_list into the global merged_sequences ---
         for d in local_seq_list:
@@ -374,13 +376,27 @@ def bridge_amplification(sequences: List[Dict[str, any]],
                 merged_sequences.append(d)
         print(f"Length of merged_sequences: {len(merged_sequences)}")
         # For the first simulation, leave the final frame displayed.
-        if simulation_index == 0:
+        if simulation_index == True:
             plt.show(block=False)
 
-        simulation_index += 1
+        simulation_index = False
 
 
     # After processing all seq_dict in sequences, summarize the cycle counts.
+
+    print(max(len(x) for x in all_cycle_counts))
+
+    # Step 1: Find the length of the longest list
+    max_length = max(len(x) for x in all_cycle_counts)
+
+    # Step 2: Pad each list to match the length of the longest list
+    padded_all_cycle_counts = []
+    for lst in all_cycle_counts:
+        if len(lst) < max_length:
+            # Append the last element until the list reaches the max length
+            lst.extend([lst[-1]] * (max_length - len(lst)))
+        padded_all_cycle_counts.append(lst)
+
     # This performs an element-wise sum over all cycle_counts lists.
     history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
     print(type(history_bridge))
@@ -469,15 +485,22 @@ def main():
     amplify_parser.add_argument('--insertion_prob', type=float, default=0.3, help="Probability of insertion mutation")
     amplify_parser.add_argument('--substrate_capacity', type=float, default=(2**18), help="Initial substrate capacity")
     amplify_parser.add_argument('--S', type=float, default=700_000_000, help="Threshold S parameter")
-    amplify_parser.add_argument('--S_radius', type=float, default=10, help="Threshold S parameter")
-    amplify_parser.add_argument('--AOE_radius', type=float, default=1, help="Threshold S parameter")
-    amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
-    amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
-    amplify_parser.add_argument('--success_prob', type=float, default=0.85, help="Success probability for Bridge amplification")
-    amplify_parser.add_argument('--deviation', type=float, default=0.1, help="Deviation for Bridge amplification parameters (e.g., 0.1 for 10%)")
-    amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv', help="Input CSV filename with true barcodes")
-    amplify_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)", default=True)
+    amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv',
+                                help="Input CSV filename with true barcodes")
+    amplify_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)",
+                                default=True)
     amplify_parser.add_argument('--no_plot', dest='plot', action='store_false', help="Disable plotting")
+
+    # Bridge amplification specific parsers:
+    amplify_parser.add_argument('--S_radius', type=float, default=10, help="Radius of S area where points are generated")
+    amplify_parser.add_argument('--AOE_radius', type=float, default=1, help="Radius of AOE of every active A point")
+    amplify_parser.add_argument('--simulate', type=bool, default=False, help="Number of amplification cycles")
+    amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
+    amplify_parser.add_argument('--success_prob', type=float, default=0.85,
+                                help="Success probability for Bridge amplification")
+    amplify_parser.add_argument('--deviation', type=float, default=0.1,
+                                help="Deviation for Bridge amplification parameters (e.g., 0.1 for 10%)")
+    amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
 
     # Subcommand: denoise
     denoise_parser = subparsers.add_parser('denoise', help="Denoise amplified sequences")
@@ -542,6 +565,7 @@ def main():
                 mutation_rate=args.mutation_rate,
                 mutation_probabilities=mutation_probabilities,
                 substrate_capacity_initial=args.substrate_capacity,
+                simulate=args.simulate,
                 S_radius=args.S_radius,
                 AOE_radius=args.AOE_radius,
                 density=args.density,
@@ -559,8 +583,8 @@ def main():
 
         if args.method == 'both' and args.plot:
             plt.figure()
-            plt.plot(range(1, args.cycles + 1), history_pcr, marker='o', label='PCR Amplification')
-            plt.plot(range(1, args.cycles + 1), history_bridge, marker='s', label='Bridge Amplification')
+            plt.plot(range(1, len(history_pcr) + 1), history_pcr, marker='o', label='PCR Amplification')
+            plt.plot(range(1, len(history_bridge) + 1), history_bridge, marker='s', label='Bridge Amplification')
             plt.xlabel("Cycle Number")
             plt.ylabel("Total Unique Sequences")
             plt.title("Total Sequences per Cycle Comparison")
