@@ -404,6 +404,302 @@ def bridge_amplification(sequences: List[Dict[str, any]],
     print(f"Length of merged_sequences: {len(merged_sequences)}")
     return merged_sequences, history_bridge
 
+def bridge_amp_ABCD(sequences: List[Dict[str, any]],
+                         simulate: bool,
+                         mutation_rate: float,
+                         mutation_probabilities: Dict[str, float],
+                         substrate_capacity_initial: float,
+                         S_radius: float,
+                         AOE_radius: float,
+                         density: float,
+                         success_prob: float,
+                         deviation: float) -> Tuple[List[Dict[str, any]], List[int]]:
+    """
+    Perform modified Bridge amplification simulation.
+    Now P points are divided into B and D points.
+    A_point (reacting with B points) and C_point (reacting with D points)
+    are created from the same starting sequence.
+    A_point acts first in each cycle and C_point acts second.
+    Points are displayed with different colours.
+    """
+    total_sequences_history = []
+    remaining_substrate = substrate_capacity_initial
+
+    simulation_index = simulate  # To track whether to animate.
+    all_cycle_counts = []  # To store cycle counts list from each simulation
+    merged_sequences = []  # To accumulate sequence dictionaries from all simulations
+    check = 0
+
+    # Calculate parameters for every sequence.
+    effective_S_radius = S_radius * (1 + random.uniform(-deviation, deviation))
+    effective_density = density * (1 + random.uniform(-deviation, deviation))
+    effective_S = math.pi * effective_S_radius ** 2
+    num_P = int(effective_density * effective_S)
+    effective_success_prob = success_prob * (1 + random.uniform(-deviation, deviation))
+    effective_success_prob = min(effective_success_prob, 1.0)
+    effective_AOE_radius = AOE_radius * (1 + random.uniform(-deviation, deviation))
+
+    # --- Divide generated P points into B_points and D_points ---
+    B_points = []
+    D_points = []
+    for i in range(num_P):
+        # Uniform distribution in a circle (using polar coordinates)
+        r = effective_S_radius * math.sqrt(random.random())
+        theta = random.uniform(0, 2 * math.pi)
+        x = r * math.cos(theta)
+        y = r * math.sin(theta)
+        point = {'id': i, 'x': x, 'y': y}
+        # Randomly assign to B or D (here 50/50 chance)
+        if random.random() < 0.5:
+            B_points.append(point)
+        else:
+            D_points.append(point)
+
+    # --- Define the A point class (reacts with B points) ---
+    class APoint:
+        def __init__(self, sequence, x, y):
+            self.sequence = sequence
+            self.x = x
+            self.y = y
+            self.active = True  # Active while it can find available B's within its AOE
+
+        def distance_to(self, p):
+            return math.hypot(self.x - p['x'], self.y - p['y'])
+
+    # --- Define the C point class (reacts with D points) ---
+    class CPoint:
+        def __init__(self, sequence, x, y):
+            self.sequence = sequence
+            self.x = x
+            self.y = y
+            self.active = True  # Active while it can find available D's within its AOE
+
+        def distance_to(self, p):
+            return math.hypot(self.x - p['x'], self.y - p['y'])
+
+    # --- Initialize with one A_point and one C_point at the centre ---
+    A_points = []
+    C_points = []
+    active_A = []
+    active_C = []
+    local_seq_list = sequences
+    initial_A = []
+    initial_C = []
+
+    for i in range(0, len(local_seq_list) - 1, 2):
+        dict_n = local_seq_list[i]
+        dict_n_plus_1 = local_seq_list[i + 1]
+
+        # Generate random coordinates for A_point within the S_area
+        r_A = effective_S_radius * math.sqrt(random.random())
+        theta_A = random.uniform(0, 2 * math.pi)
+        x_A = r_A * math.cos(theta_A)
+        y_A = r_A * math.sin(theta_A)
+
+        # Generate random coordinates for C_point within the S_area
+        r_C = effective_S_radius * math.sqrt(random.random())
+        theta_C = random.uniform(0, 2 * math.pi)
+        x_C = r_C * math.cos(theta_C)
+        y_C = r_C * math.sin(theta_C)
+
+        # Create new points with these coordinates
+        new_A = APoint(dict_n["sequence"], x_A, y_A)
+        new_C = CPoint(dict_n_plus_1["sequence"], x_C, y_C)
+
+        # Append them to your initial lists
+        initial_A.append(new_A)
+        initial_C.append(new_C)
+
+    A_points = initial_A
+    C_points = initial_C
+    active_A = initial_A
+    active_C = initial_C
+
+    # To track total number of points (both A and C) per cycle.
+    cycle_counts = []
+    cycle = 0
+
+    # --- For the first simulation only, set up the animation figure ---
+    if simulation_index == True:
+        fig, ax = plt.subplots()
+
+    # --- Main simulation loop ---
+    # Continue while at least one group has both active points and available candidate points.
+    while ((B_points and active_A) or (D_points and active_C)):
+        # Record total number of A and C points.
+        cycle_counts.append(len(A_points) + len(C_points))
+
+        # --- Animation update ---
+        if simulation_index == True:
+            ax.cla()
+            # Plot B_points (blue) and D_points (magenta)
+            b_x = [p['x'] for p in B_points]
+            b_y = [p['y'] for p in B_points]
+            ax.scatter(b_x, b_y, color='blue', s=5, label='B points')
+            d_x = [p['x'] for p in D_points]
+            d_y = [p['y'] for p in D_points]
+            ax.scatter(d_x, d_y, color='magenta', s=5, label='D points')
+            # Plot A_points (red) and C_points (orange)
+            a_x = [a.x for a in A_points]
+            a_y = [a.y for a in A_points]
+            ax.scatter(a_x, a_y, color='red', s=10, label='A points')
+            c_x = [c.x for c in C_points]
+            c_y = [c.y for c in C_points]
+            ax.scatter(c_x, c_y, color='orange', s=10, label='C points')
+            # Draw AOE for each active A point (green) and C point (purple)
+            for a in active_A:
+                circle = plt.Circle((a.x, a.y), effective_AOE_radius, color='green', alpha=0.3)
+                ax.add_patch(circle)
+            for c in active_C:
+                circle = plt.Circle((c.x, c.y), effective_AOE_radius, color='purple', alpha=0.3)
+                ax.add_patch(circle)
+            ax.set_xlim(-effective_S_radius, effective_S_radius)
+            ax.set_ylim(-effective_S_radius, effective_S_radius)
+            ax.set_aspect('equal')
+            ax.legend(loc='upper right')
+            ax.set_title(f"Cycle {cycle}")
+            plt.pause(0.5)
+
+        # --- Process A_points (react with B_points) first ---
+        pending_A = set(active_A)
+        while pending_A:
+            proposals = {}
+            remove_from_pending = set()
+            for a in list(pending_A):
+                candidates = [p for p in B_points if a.distance_to(p) <= effective_AOE_radius]
+                if not candidates:
+                    a.active = False
+                    remove_from_pending.add(a)
+                else:
+                    chosen = random.choice(candidates)
+                    proposals.setdefault(chosen['id'], []).append(a)
+            pending_A -= remove_from_pending
+            if not proposals:
+                break
+            for p_id, a_list in proposals.items():
+                p_obj = next((p for p in B_points if p['id'] == p_id), None)
+                if p_obj is None:
+                    continue  # Candidate already taken.
+                success_list = []
+                for a in a_list:
+                    if a in pending_A and random.random() < effective_success_prob:
+                        success_list.append(a)
+                if not success_list:
+                    for a in a_list:
+                        pending_A.discard(a)
+                else:
+                    winner = random.choice(success_list)
+                    mutated_seq, mutation_occurred = process_mutation(winner.sequence,
+                                                                      mutation_rate,
+                                                                      mutation_probabilities)
+                    # Update local_seq_list as before.
+                    found = False
+                    for local_dict in local_seq_list:
+                        if local_dict["sequence"] == mutated_seq:
+                            local_dict["N0"] += 1
+                            found = True
+                            break
+                    if not found:
+                        local_seq_list.append({"sequence": mutated_seq, "N0": 1})
+                    # Create a new APoint using the winner's (possibly mutated) sequence.
+                    new_A = APoint(mutated_seq, p_obj['x'], p_obj['y'])
+                    A_points.append(new_A)
+                    active_A.append(new_A)
+                    # Remove the candidate B point.
+                    B_points = [p for p in B_points if p['id'] != p_id]
+                    for a in a_list:
+                        pending_A.discard(a)
+        active_A = [a for a in active_A if a.active]
+
+        # --- Process C_points (react with D_points) second ---
+        pending_C = set(active_C)
+        while pending_C:
+            proposals = {}
+            remove_from_pending = set()
+            for c in list(pending_C):
+                candidates = [p for p in D_points if c.distance_to(p) <= effective_AOE_radius]
+                if not candidates:
+                    c.active = False
+                    remove_from_pending.add(c)
+                else:
+                    chosen = random.choice(candidates)
+                    proposals.setdefault(chosen['id'], []).append(c)
+            pending_C -= remove_from_pending
+            if not proposals:
+                break
+            for p_id, c_list in proposals.items():
+                p_obj = next((p for p in D_points if p['id'] == p_id), None)
+                if p_obj is None:
+                    continue
+                success_list = []
+                for c in c_list:
+                    if c in pending_C and random.random() < effective_success_prob:
+                        success_list.append(c)
+                if not success_list:
+                    for c in c_list:
+                        pending_C.discard(c)
+                else:
+                    winner = random.choice(success_list)
+                    mutated_seq, mutation_occurred = process_mutation(winner.sequence,
+                                                                      mutation_rate,
+                                                                      mutation_probabilities)
+                    found = False
+                    for local_dict in local_seq_list:
+                        if local_dict["sequence"] == mutated_seq:
+                            local_dict["N0"] += 1
+                            found = True
+                            break
+                    if not found:
+                        local_seq_list.append({"sequence": mutated_seq, "N0": 1})
+                    # Create a new CPoint using the winner's (possibly mutated) sequence.
+                    new_C = CPoint(mutated_seq, p_obj['x'], p_obj['y'])
+                    C_points.append(new_C)
+                    active_C.append(new_C)
+                    # Remove the candidate D point.
+                    D_points = [p for p in D_points if p['id'] != p_id]
+                    for c in c_list:
+                        pending_C.discard(c)
+        active_C = [c for c in active_C if c.active]
+
+        cycle += 1
+
+    # End of simulation cycle for this seq_dict.
+    all_cycle_counts.append(cycle_counts)
+    print(all_cycle_counts[0:2])
+    print(f"Length of local_seq_list: {len(local_seq_list)}")
+    # --- Merge this simulation's local_seq_list into the global merged_sequences ---
+    for d in local_seq_list:
+        found = False
+        for md in merged_sequences:
+            if check == 0:  # Ensure merged_sequences is empty at the start.
+                merged_sequences = []
+                check = 1
+            if md["sequence"] == d["sequence"]:
+                md["N0"] += d["N0"]
+                found = True
+                break
+        if not found:
+            merged_sequences.append(d)
+    print(f"Length of merged_sequences: {len(merged_sequences)}")
+    if simulation_index == True:
+        plt.show(block=False)
+    simulation_index = False
+
+    print(max(len(x) for x in all_cycle_counts))
+
+    # Pad cycle_counts lists to the length of the longest list.
+    max_length = max(len(x) for x in all_cycle_counts)
+    padded_all_cycle_counts = []
+    for lst in all_cycle_counts:
+        if len(lst) < max_length:
+            lst.extend([lst[-1]] * (max_length - len(lst)))
+        padded_all_cycle_counts.append(lst)
+    history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
+    print(type(history_bridge))
+    print(len(history_bridge))
+    print(f"Length of merged_sequences: {len(merged_sequences)}")
+    return merged_sequences, history_bridge
+
 
 # Simplified denoiser class using parts of your provided code.
 class Denoiser:
@@ -476,7 +772,8 @@ def main():
 
     # Subcommand: amplify
     amplify_parser = subparsers.add_parser('amplify', help="Amplify sequences using PCR and/or Bridge amplification")
-    amplify_parser.add_argument('--method', type=str, choices=['pcr', 'bridge', 'both'], required=True,
+    amplify_parser.add_argument('--method', type=str, choices=['pcr', 'bridge', 'bridge_ABCD','PCR+BRIDGE',
+                                                               'PCR+BRIDGEABCD'], required=True,
                                 help="Amplification method to use")
     amplify_parser.add_argument('--cycles', type=int, default=30, help="Number of amplification cycles")
     amplify_parser.add_argument('--mutation_rate', type=float, default=0.01, help="Mutation rate per nucleotide per replication event")
@@ -494,7 +791,7 @@ def main():
     # Bridge amplification specific parsers:
     amplify_parser.add_argument('--S_radius', type=float, default=10, help="Radius of S area where points are generated")
     amplify_parser.add_argument('--AOE_radius', type=float, default=1, help="Radius of AOE of every active A point")
-    amplify_parser.add_argument('--simulate', type=bool, default=False, help="Number of amplification cycles")
+    amplify_parser.add_argument('--simulate', type=bool, default=True, help="Number of amplification cycles")
     amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
     amplify_parser.add_argument('--success_prob', type=float, default=0.85,
                                 help="Success probability for Bridge amplification")
@@ -535,7 +832,7 @@ def main():
             logging.error("Cumulative mutation probabilities must equal 1.0")
             return
 
-        if args.method in ['pcr', 'both']:
+        if args.method in ['pcr', 'PCR+BRIDGE', 'PCR+BRIDGEABCD']:
             sequences_pcr = [dict(seq) for seq in sequences]
             logging.info("Starting PCR amplification...")
             sequences_pcr, history_pcr = pcr_amplification(
@@ -557,7 +854,7 @@ def main():
                     writer.writerow(seq)
             logging.info(f"PCR amplification complete. Results saved to {pcr_output}.")
 
-        if args.method in ['bridge', 'both']:
+        if args.method in ['bridge', 'PCR+BRIDGE']:
             sequences_bridge = [dict(seq) for seq in sequences]
             logging.info("Starting Bridge amplification...")
             sequences_bridge_amp, history_bridge = bridge_amplification(
@@ -581,7 +878,31 @@ def main():
                     writer.writerow(seq_dict)
             logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
 
-        if args.method == 'both' and args.plot:
+        if args.method in ['bridge_ABCD', 'PCR+BRIDGEABCD']:
+            sequences_bridge = [dict(seq) for seq in sequences]
+            logging.info("Starting Bridge amplification...")
+            sequences_bridge_amp, history_bridge = bridge_amp_ABCD(
+                sequences_bridge,
+                mutation_rate=args.mutation_rate,
+                mutation_probabilities=mutation_probabilities,
+                substrate_capacity_initial=args.substrate_capacity,
+                simulate=args.simulate,
+                S_radius=args.S_radius,
+                AOE_radius=args.AOE_radius,
+                density=args.density,
+                success_prob=args.success_prob,
+                deviation=args.deviation,
+            )
+            bridge_output = 'bridgeABCD_amplified.csv'
+            with open(bridge_output, 'w', newline='') as csvfile:
+                fieldnames = ['sequence', 'N0']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for seq_dict in sequences_bridge_amp:
+                    writer.writerow(seq_dict)
+            logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
+
+        if args.method == 'PCR+BRIDGE' and args.plot:
             plt.figure()
             plt.plot(range(1, len(history_pcr) + 1), history_pcr, marker='o', label='PCR Amplification')
             plt.plot(range(1, len(history_bridge) + 1), history_bridge, marker='s', label='Bridge Amplification')
