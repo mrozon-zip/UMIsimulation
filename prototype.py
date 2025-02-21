@@ -404,23 +404,30 @@ def bridge_amplification(sequences: List[Dict[str, any]],
     print(f"Length of merged_sequences: {len(merged_sequences)}")
     return merged_sequences, history_bridge
 
+
+import matplotlib.pyplot as plt
+import random
+import math
+from typing import List, Dict, Tuple
+
+
 def bridge_amp_ABCD(sequences: List[Dict[str, any]],
-                         simulate: bool,
-                         mutation_rate: float,
-                         mutation_probabilities: Dict[str, float],
-                         substrate_capacity_initial: float,
-                         S_radius: float,
-                         AOE_radius: float,
-                         density: float,
-                         success_prob: float,
-                         deviation: float) -> Tuple[List[Dict[str, any]], List[int]]:
+                    simulate: bool,
+                    mutation_rate: float,
+                    mutation_probabilities: Dict[str, float],
+                    substrate_capacity_initial: float,
+                    S_radius: float,
+                    AOE_radius: float,
+                    density: float,
+                    success_prob: float,
+                    deviation: float) -> Tuple[List[Dict[str, any]], List[int]]:
     """
-    Perform modified Bridge amplification simulation.
+    Perform modified Bridge amplification simulation with visual representation of points and AOEs at each cycle.
     Now P points are divided into B and D points.
     A_point (reacting with B points) and C_point (reacting with D points)
     are created from the same starting sequence.
     A_point acts first in each cycle and C_point acts second.
-    Points are displayed with different colours.
+    Points are displayed with different colors.
     """
     total_sequences_history = []
     remaining_substrate = substrate_capacity_initial
@@ -478,10 +485,6 @@ def bridge_amp_ABCD(sequences: List[Dict[str, any]],
             return math.hypot(self.x - p['x'], self.y - p['y'])
 
     # --- Initialize with one A_point and one C_point at the centre ---
-    A_points = []
-    C_points = []
-    active_A = []
-    active_C = []
     local_seq_list = sequences
     initial_A = []
     initial_C = []
@@ -558,7 +561,10 @@ def bridge_amp_ABCD(sequences: List[Dict[str, any]],
             ax.set_aspect('equal')
             ax.legend(loc='upper right')
             ax.set_title(f"Cycle {cycle}")
-            plt.pause(0.5)
+
+            # Force a redraw and update the plot window
+            plt.draw()
+            plt.pause(0.5)  # Ensure the plot is updated in real-time after each cycle
 
         # --- Process A_points (react with B_points) first ---
         pending_A = set(active_A)
@@ -661,12 +667,43 @@ def bridge_amp_ABCD(sequences: List[Dict[str, any]],
                         pending_C.discard(c)
         active_C = [c for c in active_C if c.active]
 
+        # Update the plot after each cycle
+        plt.show(block=False)  # Allow continuous updates after each cycle
         cycle += 1
 
-    # End of simulation cycle for this seq_dict.
+    # After the cycles are completed, show the final plot without AOEs
+    if simulation_index == True:
+        # Plot only points (no AOEs)
+        fig, ax = plt.subplots()
+        ax.cla()
+
+        # Plot B_points (blue) and D_points (magenta)
+        b_x = [p['x'] for p in B_points]
+        b_y = [p['y'] for p in B_points]
+        ax.scatter(b_x, b_y, color='blue', s=5, label='B points')
+        d_x = [p['x'] for p in D_points]
+        d_y = [p['y'] for p in D_points]
+        ax.scatter(d_x, d_y, color='magenta', s=5, label='D points')
+
+        # Plot A_points (red) and C_points (orange)
+        a_x = [a.x for a in A_points]
+        a_y = [a.y for a in A_points]
+        ax.scatter(a_x, a_y, color='red', s=10, label='A points')
+        c_x = [c.x for c in C_points]
+        c_y = [c.y for c in C_points]
+        ax.scatter(c_x, c_y, color='orange', s=10, label='C points')
+
+        ax.set_xlim(-effective_S_radius, effective_S_radius)
+        ax.set_ylim(-effective_S_radius, effective_S_radius)
+        ax.set_aspect('equal')
+        ax.legend(loc='upper right')
+        ax.set_title("Final State")
+
+    # After all cycles complete, merge the sequences
     all_cycle_counts.append(cycle_counts)
     print(all_cycle_counts[0:2])
     print(f"Length of local_seq_list: {len(local_seq_list)}")
+
     # --- Merge this simulation's local_seq_list into the global merged_sequences ---
     for d in local_seq_list:
         found = False
@@ -681,9 +718,6 @@ def bridge_amp_ABCD(sequences: List[Dict[str, any]],
         if not found:
             merged_sequences.append(d)
     print(f"Length of merged_sequences: {len(merged_sequences)}")
-    if simulation_index == True:
-        plt.show(block=False)
-    simulation_index = False
 
     print(max(len(x) for x in all_cycle_counts))
 
@@ -698,10 +732,10 @@ def bridge_amp_ABCD(sequences: List[Dict[str, any]],
     print(type(history_bridge))
     print(len(history_bridge))
     print(f"Length of merged_sequences: {len(merged_sequences)}")
+
     return merged_sequences, history_bridge
 
 
-# Simplified denoiser class using parts of your provided code.
 class Denoiser:
     def __init__(self, input_csv: str):
         self.input_csv = input_csv
@@ -791,7 +825,7 @@ def main():
     # Bridge amplification specific parsers:
     amplify_parser.add_argument('--S_radius', type=float, default=10, help="Radius of S area where points are generated")
     amplify_parser.add_argument('--AOE_radius', type=float, default=1, help="Radius of AOE of every active A point")
-    amplify_parser.add_argument('--simulate', type=bool, default=True, help="Number of amplification cycles")
+    amplify_parser.add_argument('--simulate', action='store_true', help="Number of amplification cycles")
     amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
     amplify_parser.add_argument('--success_prob', type=float, default=0.85,
                                 help="Success probability for Bridge amplification")
