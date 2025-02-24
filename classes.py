@@ -303,6 +303,7 @@ class Denoiser:
         plt.title("Confusion Matrix")
         plt.xlabel("Actual")
         plt.ylabel("Predicted")
+        plt.show()
 
         print(f"True Positives (TP): {tp}")
         print(f"True Negatives (TN): {tn}")

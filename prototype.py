@@ -12,6 +12,8 @@ import argparse
 import csv
 import logging
 import matplotlib.pyplot as plt
+import networkx as nx
+import seaborn as sns
 import random
 import math
 from typing import List, Dict, Tuple
@@ -734,9 +736,8 @@ class Denoiser:
             print("Error: Data is not initialized. Please provide a CSV file.")
             return None
 
-        # Filter the data based on the threshold
         valid_sequences = [
-            row for row in self.data if int(row['amount']) >= threshold
+            row for row in self.data if int(row['N0']) >= threshold
         ]
 
         # Save the filtered data to a CSV file
@@ -754,7 +755,7 @@ class Denoiser:
             print("Error: Data is not initializded. Please provide a CSV file.")
             return None
 
-        unique_rows = {row['Sequence']: row for row in self.data}.values()
+        unique_rows = {row['sequence']: row for row in self.data}.values()
         unique_molecules = len(unique_rows)
         print(f"Number of unique molecules before denoising: {unique_molecules}")
 
@@ -763,20 +764,19 @@ class Denoiser:
 
         # Add all nodes to the graph
         for row in unique_rows:
-            before_graph.add_node(row['Sequence'],
-                                  sequence=row['Sequence'],
-                                  amount=int(row['amount']),
-                                  molecule=row['molecule'])
+            before_graph.add_node(row['sequence'],
+                                  sequence=row['sequence'],
+                                  amount=int(row['N0']))
 
         # Add edges based on the condition
         for row_a in unique_rows:
             for row_b in unique_rows:
-                if row_a['Sequence'] != row_b['Sequence']:
-                    value_a = int(row_a['amount'])
-                    value_b = int(row_b['amount'])
+                if row_a['sequence'] != row_b['sequence']:
+                    value_a = int(row_a['N0'])
+                    value_b = int(row_b['N0'])
 
                     if value_a >= 2 * value_b - 1:
-                        before_graph.add_edge(row_a['Sequence'], row_b['Sequence'])
+                        before_graph.add_edge(row_a['sequence'], row_b['sequence'])
 
         print("Graph before filtering edges (value condition only):")
         print(f"Number of nodes: {before_graph.number_of_nodes()}, Number of edges: {before_graph.number_of_edges()}")
@@ -799,8 +799,6 @@ class Denoiser:
             edit_distance = self.levenshtein(sequence_u, sequence_v)
             if edit_distance >= 2:
                 after_graph.remove_edge(u, v)
-
-
 
         print("Graph after filtering edges (edit distance < 2):")
         print(f"Number of nodes: {after_graph.number_of_nodes()}, Number of edges: {after_graph.number_of_edges()}")
@@ -852,20 +850,20 @@ class Denoiser:
             for component in nx.connected_components(graph):
                 subgraph = graph.subgraph(component)
                 central_node = max(
-                    subgraph.nodes(data=True), key=lambda x: x[1].get('amount', 0)
+                    subgraph.nodes(data=True), key=lambda x: x[1].get('N0', 0)
                 )
                 central_node_id = central_node[0]
-                central_node_amount = central_node[1].get('amount', 0)
+                central_node_amount = central_node[1].get('N0', 0)
                 sequence = central_node[1].get('sequence', '')
 
                 # Calculate the total amount of all connected nodes
                 total_amount = central_node_amount
                 for node in subgraph.nodes(data=True):
-                    total_amount += node[1].get('amount', 0)
+                    total_amount += node[1].get('N0', 0)
 
                 # Add the resolved data to the list
                 central_nodes_data.append({
-                    'Sequence': sequence,
+                    'sequence': sequence,
                     'Central Node Count': central_node_amount,
                     'Network Nodes Count': total_amount
                 })
@@ -884,14 +882,14 @@ class Denoiser:
 
         return central_nodes_data
 
-    def analysis(self, denoised_file, true_umis_file, amplified_umis_file="amplified_UMIs.csv"):
+    def analysis(self, denoised_file, true_umis_file):
         def load_file(file):
             with open(file, mode='r') as f:
-                return {row['Sequence'] for row in csv.DictReader(f)}
+                return {row['sequence'] for row in csv.DictReader(f)}
 
         sequences_denoised = load_file(denoised_file)
         sequences_true = load_file(true_umis_file)
-        sequences_amplified = load_file(amplified_umis_file)
+        sequences_amplified = load_file(self.input_csv)
 
         tp = len(sequences_denoised & sequences_true)
         fn = len(sequences_true - sequences_denoised)
@@ -906,6 +904,7 @@ class Denoiser:
         plt.title("Confusion Matrix")
         plt.xlabel("Actual")
         plt.ylabel("Predicted")
+        plt.show()
 
         print(f"True Positives (TP): {tp}")
         print(f"True Negatives (TN): {tn}")
@@ -961,64 +960,8 @@ class Denoiser:
         plt.title("Node Probe Subgraph")
         plt.show()
 
-class Denoiser:
-    def __init__(self, input_csv: str):
-        self.input_csv = input_csv
-        self.data = []
-        self.load_data()
-
-    def load_data(self):
-        with open(self.input_csv, 'r') as f:
-            reader = csv.DictReader(f)
-            self.data = [row for row in reader]
-        logging.info(f"Denoiser loaded {len(self.data)} sequences from {self.input_csv}")
-
-    def simple(self, threshold: int, output_csv: str, plot: bool = True):
-        valid_sequences = [row for row in self.data if int(row.get('N0', row.get('amount', 0))) >= threshold]
-        with open(output_csv, 'w', newline='') as f:
-            if valid_sequences:
-                writer = csv.DictWriter(f, fieldnames=valid_sequences[0].keys())
-                writer.writeheader()
-                writer.writerows(valid_sequences)
-        logging.info(f"Simple denoising complete. {len(valid_sequences)} sequences saved to {output_csv}")
-        if plot:
-            amounts = [int(row.get('N0', row.get('amount', 0))) for row in valid_sequences]
-            plt.figure()
-            plt.hist(amounts, bins=20, color='skyblue', edgecolor='black')
-            plt.xlabel("N0 / Amount")
-            plt.ylabel("Frequency")
-            plt.title("Distribution of Sequence Counts after Simple Denoising")
-            plt.grid(True)
-            plt.show()
-        return valid_sequences
-
-    def directional(self, output_csv: str, plot: bool = True):
-        # Group sequences by their string and sum counts.
-        sequence_map = {}
-        for row in self.data:
-            seq = row['sequence'] if 'sequence' in row else row.get('Sequence', '')
-            count = int(row.get('N0', row.get('amount', 1)))
-            sequence_map[seq] = sequence_map.get(seq, 0) + count
-        result = [{'sequence': seq, 'count': count} for seq, count in sequence_map.items() if count >= 2]
-        with open(output_csv, 'w', newline='') as f:
-            if result:
-                writer = csv.DictWriter(f, fieldnames=['sequence', 'count'])
-                writer.writeheader()
-                writer.writerows(result)
-        logging.info(f"Directional denoising complete. {len(result)} sequences saved to {output_csv}")
-        if plot:
-            counts = [item['count'] for item in result]
-            plt.figure()
-            plt.hist(counts, bins=20, color='lightgreen', edgecolor='black')
-            plt.xlabel("Sequence Count")
-            plt.ylabel("Frequency")
-            plt.title("Directional Denoising: Sequence Count Distribution")
-            plt.grid(True)
-            plt.show()
-        return result
-
-
 def main():
+    global denoised_file
     parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
     subparsers = parser.add_subparsers(dest='command', required=True)
 
@@ -1070,9 +1013,8 @@ def main():
     denoise_parser.add_argument('--threshold', type=int, default=300, help="Threshold for simple denoising")
     denoise_parser.add_argument('--output', type=str, default='denoised.csv',
                                 help="Output CSV filename for denoised sequences")
-    denoise_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)",
-                                default=True)
-    denoise_parser.add_argument('--no_plot', dest='plot', action='store_false', help="Disable plotting")
+    denoise_parser.add_argument("--show", type=int, default=3, help='Determine what plots to be shown')
+    denoise_parser.add_argument('--input_true_barcodes', type=str, default='true_barcodes.csv')
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -1177,11 +1119,22 @@ def main():
             plt.show()
 
     elif args.command == 'denoise':
+        # Perform denoising
         denoiser = Denoiser(args.input)
-        if args.method == 'simple':
-            denoiser.simple(args.threshold, args.output, plot=args.plot)
-        elif args.method == 'directional':
-            denoiser.directional(args.output, plot=args.plot)
+        if args.method == "directional":
+            before_graph, after_graph, unique_molecules = denoiser.directional_networks(show=args.show)
+            denoiser.networks_resolver(after_graph, toggle="central_node")
+            denoiser.node_probe(after_graph)
+            denoised_file = "directional_results.csv"
+        elif args.method == "simple":
+            threshold_value = args.threshold
+            denoiser.simple(threshold_value)
+            denoised_file = args.output
+        else:
+            print("Invalid input in method choice")
+
+        true_barcodes = args.input_true_barcodes
+        denoiser.analysis(denoised_file, true_barcodes)
 
 
 if __name__ == '__main__':
