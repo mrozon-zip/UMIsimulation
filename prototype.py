@@ -801,6 +801,7 @@ class Denoiser:
                 after_graph.remove_edge(u, v)
 
 
+
         print("Graph after filtering edges (edit distance < 2):")
         print(f"Number of nodes: {after_graph.number_of_nodes()}, Number of edges: {after_graph.number_of_edges()}")
 
