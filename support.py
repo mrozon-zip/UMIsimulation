@@ -1,0 +1,68 @@
+import random
+import math
+from typing import Dict, Tuple
+
+
+# Global nucleotides list
+NUCLEOTIDES = ['A', 'C', 'G', 'T']
+
+
+def compute_global_p(current_n: float, remaining_substrate: float, substrate_capacity_initial: float,
+                     s: float, k: float, c: float) -> float:
+    """
+    Compute the global amplification probability using the provided PCR formula.
+    current_N: Total copies in the system.
+    remaining_substrate: Remaining substrate capacity.
+    substrate_capacity_initial: The initial substrate capacity.
+    S: Threshold parameter.
+    K: Half-saturation constant (typically S * 10).
+    C: Sharpness of phase transition.
+    """
+    sub_depletion = remaining_substrate / substrate_capacity_initial
+    if current_n < s:
+        p_equation = k / (k + s)
+    else:
+        p_equation = (k / (k + current_n)) * ((1 + math.exp(-c * (current_n / (s - 1)))) / 2)
+    p = p_equation * sub_depletion
+    return p
+
+
+def process_mutation(sequence: str, mutation_rate: float,
+                     mutation_probabilities: Dict[str, float]) -> Tuple[str, bool]:
+    """
+    Process mutation over a sequence replication event.
+    Each nucleotide is checked with probability `mutation_rate` for mutation.
+    If a mutation occurs, one of three types is chosen:
+      - substitution: replace nucleotide with a different one.
+      - deletion: remove the nucleotide.
+      - insertion: insert a new nucleotide before the current one.
+    Returns a tuple of (possibly mutated sequence, mutation_occurred flag).
+    """
+    seq_list = list(sequence)
+    mutated = False
+    i = 0
+    while i < len(seq_list):
+        if random.random() < mutation_rate:
+            mutated = True
+            mutation_type = random.choices(
+                population=['substitution', 'deletion', 'insertion'],
+                weights=[mutation_probabilities['substitution'],
+                         mutation_probabilities['deletion'],
+                         mutation_probabilities['insertion']],
+                k=1
+            )[0]
+            if mutation_type == 'substitution':
+                current_nuc = seq_list[i]
+                options = [n for n in NUCLEOTIDES if n != current_nuc]
+                seq_list[i] = random.choice(options)
+                i += 1
+            elif mutation_type == 'deletion':
+                del seq_list[i]
+                # Do not increment i; next nucleotide shifts into this position.
+            elif mutation_type == 'insertion':
+                inserted = random.choice(NUCLEOTIDES)
+                seq_list.insert(i, inserted)
+                i += 2  # Skip the inserted nucleotide.
+        else:
+            i += 1
+    return ''.join(seq_list), mutated
