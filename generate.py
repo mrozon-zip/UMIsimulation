@@ -3,6 +3,8 @@ from typing import List, Dict
 import csv
 import logging
 
+random.seed(42)
+
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
 

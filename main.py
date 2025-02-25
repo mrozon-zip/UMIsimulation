@@ -39,6 +39,7 @@ amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv',
                             help="Input CSV filename with true barcodes")
 amplify_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)",
                             default=True)
+amplify_parser.add_argument('--output', type=str, default='amplified.csv')
 amplify_parser.add_argument('--no_plot', dest='plot', action='store_false', help="Disable plotting")
 
 # Bridge amplification specific parsers:
@@ -89,7 +90,7 @@ elif args.command == 'amplify':
     if args.method in ['pcr', 'both_12', 'both_13']:
         sequences_pcr = [dict(seq) for seq in sequences]
         logging.info("Starting PCR amplification...")
-        sequences_pcr, history_pcr = pcr_amplification(
+        sequences_pcr, history_pcr, pcr_output = pcr_amplification(
             sequences_pcr,
             cycles=args.cycles,
             mutation_rate=args.mutation_rate,
@@ -97,9 +98,8 @@ elif args.command == 'amplify':
             substrate_capacity_initial=args.substrate_capacity,
             s=args.S,
             c=args.C,
-            plot=args.plot
+            output=args.output,
         )
-        pcr_output = 'pcr_amplified.csv'
         with open(pcr_output, 'w', newline='') as f:
             fieldnames = ['sequence', 'N0']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -121,6 +121,7 @@ elif args.command == 'amplify':
             density=args.density,
             success_prob=args.success_prob,
             deviation=args.deviation,
+            bridge_output=args.output,
         )
         bridge_output = 'bridge_amplified.csv'
         with open(bridge_output, 'w', newline='') as csvfile:
@@ -144,6 +145,7 @@ elif args.command == 'amplify':
             density=args.density,
             success_prob=args.success_prob,
             deviation=args.deviation,
+            polonies_output=args.output,
         )
         polony_output = 'bridgeABCD_amplified.csv'
         with open(polony_output, 'w', newline='') as csvfile:

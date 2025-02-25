@@ -2,8 +2,11 @@ import logging
 import matplotlib.pyplot as plt
 import random
 import math
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 from support import compute_global_p, process_mutation
+import os
+
+random.seed(42)
 
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
@@ -16,7 +19,7 @@ def pcr_amplification(sequences: List[Dict[str, any]],
                       substrate_capacity_initial: float,
                       s: float,
                       c: float,
-                      plot: bool) -> Tuple[List[Dict[str, any]], List[int]]:
+                      output: str,) -> tuple[list[dict[str, Any]], list[int], str]:
     """
     Perform PCR amplification simulation.
     For each cycle:
@@ -30,7 +33,7 @@ def pcr_amplification(sequences: List[Dict[str, any]],
     """
     total_sequences_history = []
     remaining_substrate = substrate_capacity_initial
-    k = s * 5
+    k = s * 10
     for cycle in range(1, cycles + 1):
         logging.info(f"PCR Amplification: Cycle {cycle} starting with {len(sequences)} sequences.")
         current_n = sum(seq['N0'] for seq in sequences)
@@ -54,10 +57,12 @@ def pcr_amplification(sequences: List[Dict[str, any]],
         new_total = sum(seq['N0'] for seq in sequences)
         delta_n = new_total - current_n
         remaining_substrate = max(0, remaining_substrate - delta_n)
-        total_sequences_history.append(len(sequences))
+        total_sequences_history.append(new_total)
         logging.info(
             f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}")
-    return sequences, total_sequences_history
+        base, ext = os.path.splitext(output)
+        pcr_output = f"pcr_{base}{ext}"
+    return sequences, total_sequences_history, pcr_output
 
 
 def bridge_amplification(sequences: List[Dict[str, any]],

@@ -2,6 +2,7 @@ import random
 import math
 from typing import Dict, Tuple
 
+random.seed(42)
 
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']

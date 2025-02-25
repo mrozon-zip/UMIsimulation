@@ -5,6 +5,7 @@ import networkx as nx
 import seaborn as sns
 import random
 
+random.seed(42)
 
 class Denoiser:
     def __init__(self, input_csv: str):
