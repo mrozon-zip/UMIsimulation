@@ -61,7 +61,7 @@ def pcr_amplification(sequences: List[Dict[str, any]],
         logging.info(
             f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}")
         base, ext = os.path.splitext(output)
-        pcr_output = f"pcr_{base}{ext}"
+        pcr_output = f"results/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output
 
 
@@ -287,7 +287,7 @@ def bridge_amplification(sequences: List[Dict[str, any]],
     # This performs an element-wise sum over all cycle_counts lists.
     history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
     base, ext = os.path.splitext(output)
-    bridge_output = f"bridge_{base}{ext}"
+    bridge_output = f"results/bridge_{base}{ext}"
     print(f"Length of merged_sequences: {len(merged_sequences)}")
     return merged_sequences, history_bridge, bridge_output
 
@@ -609,5 +609,5 @@ def polonies_amplification(sequences: List[Dict[str, any]],
     history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
     print(f"Length of merged_sequences: {len(merged_sequences)}")
     base, ext = os.path.splitext(output)
-    polonies_output = f"polonies_{base}{ext}"
+    polonies_output = f"results/polonies_{base}{ext}"
     return merged_sequences, history_bridge, polonies_output
