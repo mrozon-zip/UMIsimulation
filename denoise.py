@@ -26,14 +26,7 @@ class Denoiser:
         valid_sequences = [
             row for row in self.data if int(row['N0']) >= threshold
         ]
-
-        # Save the filtered data to a CSV file
-        with open('simple_result.csv', mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=valid_sequences[0].keys())
-            writer.writeheader()
-            writer.writerows(valid_sequences)
-
-        print(f"Enhanced results saved to 'simple_result.csv' with {len(valid_sequences)} rows.")
+        print(f"Found {len(valid_sequences)} valid sequences after threshold filtering.")
 
         return valid_sequences
 
@@ -154,14 +147,6 @@ class Denoiser:
                     'Central Node Count': central_node_amount,
                     'Network Nodes Count': total_amount
                 })
-
-            # Save the results to a CSV file
-            with open('directional_results.csv', mode='w', newline='') as file:
-                writer = csv.DictWriter(file, fieldnames=central_nodes_data[0].keys())
-                writer.writeheader()
-                writer.writerows(central_nodes_data)
-
-            print("Central nodes saved to 'directional_results.csv'.")
 
         else:
             print(f"Toggle '{toggle}' is not implemented.")

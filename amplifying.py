@@ -30,7 +30,7 @@ def pcr_amplification(sequences: List[Dict[str, any]],
     """
     total_sequences_history = []
     remaining_substrate = substrate_capacity_initial
-    k = s * 10
+    k = s * 5
     for cycle in range(1, cycles + 1):
         logging.info(f"PCR Amplification: Cycle {cycle} starting with {len(sequences)} sequences.")
         current_n = sum(seq['N0'] for seq in sequences)

@@ -6,6 +6,7 @@ import math
 from denoise import Denoiser
 from amplifying import pcr_amplification, bridge_amplification, polonies_amplification
 from generate import generate_sequences
+import os
 
 
 parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
@@ -30,9 +31,10 @@ amplify_parser.add_argument('--substitution_prob', type=float, default=0.4,
                             help="Probability of substitution mutation")
 amplify_parser.add_argument('--deletion_prob', type=float, default=0.3, help="Probability of deletion mutation")
 amplify_parser.add_argument('--insertion_prob', type=float, default=0.3, help="Probability of insertion mutation")
-amplify_parser.add_argument('--substrate_capacity', type=float, default=(2 ** 18),
+amplify_parser.add_argument('--substrate_capacity', type=float, default=(2 ** 15),
                             help="Initial substrate capacity")
-amplify_parser.add_argument('--S', type=float, default=700_000_000, help="Threshold S parameter")
+amplify_parser.add_argument('--S', type=float, default=2000, help="Threshold S parameter")
+amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
 amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv',
                             help="Input CSV filename with true barcodes")
 amplify_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)",
@@ -49,7 +51,7 @@ amplify_parser.add_argument('--success_prob', type=float, default=0.85,
                             help="Success probability for Bridge amplification")
 amplify_parser.add_argument('--deviation', type=float, default=0.1,
                             help="Deviation for Bridge amplification parameters (e.g., 0.1 for 10%)")
-amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
+
 
 # Subcommand: denoise
 denoise_parser = subparsers.add_parser('denoise', help="Denoise amplified sequences")
@@ -152,7 +154,7 @@ elif args.command == 'amplify':
                 writer.writerow(seq_dict)
         logging.info(f"Generated {len(sequences_polony_amp)} sequences and saved to {polony_output}")
 
-    if args.method == 'both_12' and args.plot:
+    if args.method in ['both_12', 'both_13'] and args.plot:
         plt.figure()
         plt.plot(range(1, len(history_pcr) + 1), history_pcr, marker='o', label='PCR Amplification')
         plt.plot(range(1, len(history_bridge) + 1), history_bridge, marker='s', label='Bridge Amplification')
@@ -166,15 +168,37 @@ elif args.command == 'amplify':
 elif args.command == 'denoise':
     # Perform denoising
     denoiser = Denoiser(args.input)
+    filename = 'results.csv'
     if args.method == "directional":
         before_graph, after_graph, unique_molecules = denoiser.directional_networks(show=args.show)
-        denoiser.networks_resolver(after_graph, toggle="central_node")
+        central_nodes_data = denoiser.networks_resolver(after_graph, toggle="central_node")
         denoiser.node_probe(after_graph)
-        denoised_file = "directional_results.csv"
+        prefix = 'directional'
+        # Split the filename into base and extension
+        base, ext = os.path.splitext(filename)
+        denoised_file = f"{prefix}_{base}{ext}"
+        # Save the results to a CSV file
+        with open(denoised_file, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=central_nodes_data[0].keys())
+            writer.writeheader()
+            writer.writerows(central_nodes_data)
+
+        print(f"Central nodes saved to '{denoised_file}' with {len(central_nodes_data)} rows.")
     elif args.method == "simple":
         threshold_value = args.threshold
-        denoiser.simple(threshold_value)
-        denoised_file = args.output
+        valid_sequences = denoiser.simple(threshold_value)
+        prefix = 'simple'
+        # Use the input filename from the arguments (not a hardcoded variable)
+        base, ext = os.path.splitext(args.input)
+        denoised_file = f"{prefix}_{base}{ext}"
+
+        # Write the filtered data to the computed output CSV file
+        with open(denoised_file, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=valid_sequences[0].keys())
+            writer.writeheader()
+            writer.writerows(valid_sequences)
+
+        print(f"Enhanced results saved to '{denoised_file}' with {len(valid_sequences)} rows.")
     else:
         print("Invalid input in method choice")
 
