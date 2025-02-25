@@ -111,7 +111,7 @@ elif args.command == 'amplify':
     if args.method in ['bridge', 'both_12']:
         sequences_bridge = [dict(seq) for seq in sequences]
         logging.info("Starting Bridge amplification...")
-        sequences_bridge_amp, history_bridge = bridge_amplification(
+        sequences_bridge_amp, history_bridge, bridge_output = bridge_amplification(
             sequences_bridge,
             mutation_rate=args.mutation_rate,
             mutation_probabilities=mutation_probabilities,
@@ -121,9 +121,8 @@ elif args.command == 'amplify':
             density=args.density,
             success_prob=args.success_prob,
             deviation=args.deviation,
-            bridge_output=args.output,
+            output=args.output,
         )
-        bridge_output = 'bridge_amplified.csv'
         with open(bridge_output, 'w', newline='') as csvfile:
             fieldnames = ['sequence', 'N0']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -135,7 +134,7 @@ elif args.command == 'amplify':
     if args.method in ['polonies_amplification', 'both_13']:
         sequences_bridge = [dict(seq) for seq in sequences]
         logging.info("Starting Bridge amplification...")
-        sequences_polony_amp, hist_polony_amp = polonies_amplification(
+        sequences_polony_amp, hist_polony_amp, polonies_output = polonies_amplification(
             sequences_bridge,
             mutation_rate=args.mutation_rate,
             mutation_probabilities=mutation_probabilities,
@@ -145,16 +144,15 @@ elif args.command == 'amplify':
             density=args.density,
             success_prob=args.success_prob,
             deviation=args.deviation,
-            polonies_output=args.output,
+            output=args.output,
         )
-        polony_output = 'bridgeABCD_amplified.csv'
-        with open(polony_output, 'w', newline='') as csvfile:
+        with open(polonies_output, 'w', newline='') as csvfile:
             fieldnames = ['sequence', 'N0']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for seq_dict in sequences_polony_amp:
                 writer.writerow(seq_dict)
-        logging.info(f"Generated {len(sequences_polony_amp)} sequences and saved to {polony_output}")
+        logging.info(f"Generated {len(sequences_polony_amp)} sequences and saved to {polonies_output}")
 
     if args.plot and args.method in ['both_12', 'both_13', 'bridge', 'polonies_amplification', 'pcr']:
         # Build a configuration dictionary that maps each method to its plotting parameters.

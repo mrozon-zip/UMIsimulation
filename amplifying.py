@@ -73,7 +73,8 @@ def bridge_amplification(sequences: List[Dict[str, any]],
                          aoe_radius: float,
                          density: float,
                          success_prob: float,
-                         deviation: float, ) -> Tuple[List[Dict[str, any]], List[int]]:
+                         deviation: float,
+                         output: str,) -> tuple[list[dict[str, Any] | dict[str, str | int]], list[int | Any], str]:
     """
     Perform Bridge amplification simulation.
     Each cycle applies a random deviation (±10% by default) to parameters S, density, and success probability.
@@ -285,10 +286,10 @@ def bridge_amplification(sequences: List[Dict[str, any]],
 
     # This performs an element-wise sum over all cycle_counts lists.
     history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
-    print(type(history_bridge))
-    print(len(history_bridge))
+    base, ext = os.path.splitext(output)
+    bridge_output = f"bridge_{base}{ext}"
     print(f"Length of merged_sequences: {len(merged_sequences)}")
-    return merged_sequences, history_bridge
+    return merged_sequences, history_bridge, bridge_output
 
 
 def polonies_amplification(sequences: List[Dict[str, any]],
@@ -299,7 +300,8 @@ def polonies_amplification(sequences: List[Dict[str, any]],
                            aoe_radius: float,
                            density: float,
                            success_prob: float,
-                           deviation: float) -> Tuple[List[Dict[str, any]], List[int]]:
+                           deviation: float,
+                           output: str,) -> tuple[list[dict[str, Any]], list[int | Any], str]:
     """
     Perform modified Bridge amplification simulation with visual representation of points and AOEs at each cycle.
     Now P points are divided into B and D points.
@@ -606,4 +608,6 @@ def polonies_amplification(sequences: List[Dict[str, any]],
         padded_all_cycle_counts.append(lst)
     history_bridge = [sum(x) for x in zip(*all_cycle_counts)]
     print(f"Length of merged_sequences: {len(merged_sequences)}")
-    return merged_sequences, history_bridge
+    base, ext = os.path.splitext(output)
+    polonies_output = f"polonies_{base}{ext}"
+    return merged_sequences, history_bridge, polonies_output
