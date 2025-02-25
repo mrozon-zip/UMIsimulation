@@ -57,14 +57,6 @@ def pcr_amplification(sequences: List[Dict[str, any]],
         total_sequences_history.append(len(sequences))
         logging.info(
             f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}")
-    if plot:
-        plt.figure()
-        plt.plot(range(1, cycles + 1), total_sequences_history, marker='o')
-        plt.xlabel("Cycle Number")
-        plt.ylabel("Total Number of Unique Sequences")
-        plt.title("PCR Amplification: Total Sequences per Cycle")
-        plt.grid(True)
-        plt.show()
     return sequences, total_sequences_history
 
 
@@ -252,8 +244,6 @@ def bridge_amplification(sequences: List[Dict[str, any]],
 
         # End of simulation for this seq_dict.
         all_cycle_counts.append(cycle_counts)
-        print(all_cycle_counts[0:2])
-        print(f"Length of local_seq_list: {len(local_seq_list)}")
         # --- Merge this simulation's local_seq_list into the global merged_sequences ---
         for d in local_seq_list:
             found = False
@@ -267,7 +257,6 @@ def bridge_amplification(sequences: List[Dict[str, any]],
                     break
             if not found:
                 merged_sequences.append(d)
-        print(f"Length of merged_sequences: {len(merged_sequences)}")
         # For the first simulation, leave the final frame displayed.
         if simulation_index:
             plt.show(block=False)

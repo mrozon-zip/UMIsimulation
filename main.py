@@ -31,9 +31,9 @@ amplify_parser.add_argument('--substitution_prob', type=float, default=0.4,
                             help="Probability of substitution mutation")
 amplify_parser.add_argument('--deletion_prob', type=float, default=0.3, help="Probability of deletion mutation")
 amplify_parser.add_argument('--insertion_prob', type=float, default=0.3, help="Probability of insertion mutation")
-amplify_parser.add_argument('--substrate_capacity', type=float, default=(2 ** 15),
+amplify_parser.add_argument('--substrate_capacity', type=float, default=(2 ** 18),
                             help="Initial substrate capacity")
-amplify_parser.add_argument('--S', type=float, default=2000, help="Threshold S parameter")
+amplify_parser.add_argument('--S', type=float, default=9_000_000, help="Threshold S parameter")
 amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
 amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv',
                             help="Input CSV filename with true barcodes")
@@ -154,14 +154,71 @@ elif args.command == 'amplify':
                 writer.writerow(seq_dict)
         logging.info(f"Generated {len(sequences_polony_amp)} sequences and saved to {polony_output}")
 
-    if args.method in ['both_12', 'both_13'] and args.plot:
+    if args.plot and args.method in ['both_12', 'both_13', 'bridge', 'polonies_amplification', 'pcr']:
+        # Build a configuration dictionary that maps each method to its plotting parameters.
+        # Note: history_pcr is only defined for 'pcr', 'both_12', and 'both_13';
+        # history_bridge is defined for 'both_12' and 'bridge';
+        # hist_polony_amp is defined for 'both_13' and 'polonies_amplification'.
+        plot_configs = {
+            'both_12': {
+                'datasets': [
+                    {'data': globals().get('history_pcr'), 'marker': 'o', 'label': 'PCR Amplification'},
+                    {'data': globals().get('history_bridge'), 'marker': 's', 'label': 'Bridge Amplification'}
+                ],
+                'xlabel': "Cycle Number",
+                'ylabel': "Total Unique Sequences",
+                'title': "Total Sequences per Cycle Comparison"
+            },
+            'both_13': {
+                'datasets': [
+                    {'data': globals().get('history_pcr'), 'marker': 'o', 'label': 'PCR Amplification'},
+                    {'data': globals().get('hist_polony_amp'), 'marker': 's', 'label': 'Bridge Amplification'}
+                ],
+                'xlabel': "Cycle Number",
+                'ylabel': "Total Unique Sequences",
+                'title': "Total Sequences per Cycle Comparison"
+            },
+            'bridge': {
+                'datasets': [
+                    {'data': globals().get('history_bridge'), 'marker': 's', 'label': 'Bridge Amplification'}
+                ],
+                'xlabel': "Cycle Number",
+                'ylabel': "Total Unique Sequences",
+                'title': "Total Sequences per Cycle Comparison"
+            },
+            'polonies_amplification': {
+                'datasets': [
+                    {'data': globals().get('hist_polony_amp'), 'marker': 's', 'label': 'Bridge Amplification'}
+                ],
+                'xlabel': "Cycle Number",
+                'ylabel': "Total Unique Sequences",
+                'title': "Total Sequences per Cycle Comparison"
+            },
+            'pcr': {
+                'datasets': [
+                    {'data': globals().get('history_pcr'), 'marker': 'o', 'label': None}
+                ],
+                'xlabel': "Cycle Number",
+                'ylabel': "Total Number of Unique Sequences",
+                'title': "PCR Amplification: Total Sequences per Cycle"
+            }
+        }
+
+        config = plot_configs[args.method]
         plt.figure()
-        plt.plot(range(1, len(history_pcr) + 1), history_pcr, marker='o', label='PCR Amplification')
-        plt.plot(range(1, len(history_bridge) + 1), history_bridge, marker='s', label='Bridge Amplification')
-        plt.xlabel("Cycle Number")
-        plt.ylabel("Total Unique Sequences")
-        plt.title("Total Sequences per Cycle Comparison")
-        plt.legend()
+        for dataset in config['datasets']:
+            data = dataset['data']
+            # If the data is not defined (i.e. globals().get returned None), warn and skip plotting that dataset.
+            if data is None:
+                print(f"Warning: Data for {dataset.get('label') or args.method} is not defined. Skipping.")
+                continue
+            plt.plot(range(1, len(data) + 1), data, marker=dataset['marker'], label=dataset.get('label'))
+        plt.xlabel(config['xlabel'])
+        plt.ylabel(config['ylabel'])
+        plt.title(config['title'])
+        # Only add a legend if at least one dataset provided a label.
+        if any(ds.get('label') and ds.get('data') is not None for ds in config['datasets']):
+            plt.legend()
         plt.grid(True)
         plt.show()
 
@@ -187,6 +244,7 @@ elif args.command == 'denoise':
     elif args.method == "simple":
         threshold_value = args.threshold
         valid_sequences = denoiser.simple(threshold_value)
+
         prefix = 'simple'
         # Use the input filename from the arguments (not a hardcoded variable)
         base, ext = os.path.splitext(args.input)
