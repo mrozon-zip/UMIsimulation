@@ -8,6 +8,7 @@ from amplifying import pcr_amplification, bridge_amplification, polonies_amplifi
 from generate import generate_sequences
 import os
 
+os.makedirs("results", exist_ok=True)
 
 parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
 subparsers = parser.add_subparsers(dest='command', required=True)
