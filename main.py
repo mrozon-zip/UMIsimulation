@@ -47,7 +47,8 @@ amplify_parser.add_argument('--no_plot', dest='plot', action='store_false', help
 amplify_parser.add_argument('--S_radius', type=float, default=10,
                             help="Radius of S area where points are generated")
 amplify_parser.add_argument('--AOE_radius', type=float, default=1, help="Radius of AOE of every active A point")
-amplify_parser.add_argument('--simulate', action='store_true', help="Number of amplification cycles")
+amplify_parser.add_argument('--simulate', action='store_true', dest='simulate', help="Number of amplification cycles")
+amplify_parser.add_argument('--no_simulate', action='store_false', dest='simulate', help="Number of amplification cycles")
 # TO DO: include --no_simulate with 'store_false'
 amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
 amplify_parser.add_argument('--success_prob', type=float, default=0.85,

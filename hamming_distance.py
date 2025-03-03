@@ -2,15 +2,27 @@
 import csv
 import os
 import argparse
+import random
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-def read_csv_file(filepath):
+def read_csv_file(filepath, sample_size):
     """Read a CSV file and return a list of dictionaries."""
     with open(filepath, 'r', newline='') as f:
         reader = csv.DictReader(f)
-        return list(reader)
+        rows = list(reader)
+
+        if len(rows) >= 50_000:
+            # Use the provided sample_size if dataset is large.
+            sampled_data = random.sample(rows, sample_size)
+            print("Dataset size bigger than 50_000, sample might be lower than 20%")
+        else:
+            k = int(0.2 * len(rows))
+            sampled_data = random.sample(rows, k)
+            print("Sampling 20% of the dataset")
+
+        return sampled_data
 
 
 def pad_sequences(data):
@@ -72,10 +84,11 @@ def compute_distance_distribution(sequences, metric="hamming"):
     return distribution, distances
 
 
-def create_distance_distribution_figure(distribution, base, metric):
+def create_distance_distribution_figure(distribution, base, metric, source_file):
     """
     Create a bar chart figure for the distance distribution.
     The y-axis shows percentage values.
+    Annotate the figure with the source file information.
     """
     fig = plt.figure()
     dists = sorted(distribution.keys())
@@ -86,7 +99,7 @@ def create_distance_distribution_figure(distribution, base, metric):
     plt.bar(dists, percentages, width=0.8, color='skyblue', edgecolor='black')
     plt.xlabel(f"{metric.capitalize()} Distance")
     plt.ylabel("Percentage (%)")
-    plt.title(f"{metric.capitalize()} Distance Distribution for {base}")
+    plt.title(f"{metric.capitalize()} Distance Distribution\nFile: {os.path.basename(source_file)}")
     plt.grid(True)
     return fig
 
@@ -99,103 +112,91 @@ def main():
     parser.add_argument("--metric", type=str, choices=["hamming", "levenshtein", "both"],
                         default="hamming",
                         help="Distance metric to use: 'hamming' (requires equal length), 'levenshtein', or 'both'.")
+    parser.add_argument("--range", type=int, default=1000, help="Sample size for analysis")
     args = parser.parse_args()
 
     # Dictionaries for aggregated data
-    n0_values_per_file = {}  # {filepath: [N0, ...]}
+    n0_values_per_file = {}                # {filepath: [N0, ...]}
     hamming_distance_values_per_file = {}  # Only populated if metric in ("hamming", "both")
     levenshtein_distance_values_per_file = {}  # Only populated if metric in ("levenshtein", "both")
 
-    # Process each file individually
-    for filepath in args.csv_files:
-        print(f"Processing {filepath}...")
-        data = read_csv_file(filepath)
-        base, _ = os.path.splitext(filepath)
-        n0_values = [int(row['N0']) for row in data]
-        n0_values_per_file[filepath] = n0_values
+    # Create one aggregated PDF file for all plots.
+    aggregated_pdf = "all_plots.pdf"
+    with PdfPages(aggregated_pdf) as pdf:
+        # Process each CSV file
+        for filepath in args.csv_files:
+            print(f"Processing {filepath}...")
+            data = read_csv_file(filepath, args.range)
+            base, _ = os.path.splitext(filepath)
+            n0_values = [int(row['N0']) for row in data]
+            n0_values_per_file[filepath] = n0_values
 
-        # List to hold figures for the per-file PDF
-        figures = []
+            if args.metric in ["hamming", "both"]:
+                # For Hamming, pad sequences so all have equal length.
+                data_hamming = pad_sequences([dict(row) for row in data])
+                sequences_hamming = [row['sequence'] for row in data_hamming]
+                distribution_hamming, distances_hamming = compute_distance_distribution(sequences_hamming, metric="hamming")
+                hamming_distance_values_per_file[filepath] = distances_hamming
+                fig_hamming = create_distance_distribution_figure(distribution_hamming, base, "hamming", filepath)
+                pdf.savefig(fig_hamming)
+                plt.close(fig_hamming)
 
+            if args.metric in ["levenshtein", "both"]:
+                # For Levenshtein, use the original sequences.
+                sequences_lev = [row['sequence'] for row in data]
+                distribution_lev, distances_lev = compute_distance_distribution(sequences_lev, metric="levenshtein")
+                levenshtein_distance_values_per_file[filepath] = distances_lev
+                fig_lev = create_distance_distribution_figure(distribution_lev, base, "levenshtein", filepath)
+                pdf.savefig(fig_lev)
+                plt.close(fig_lev)
+
+        # Aggregated box plot for N0 values (across all files)
+        plt.figure()
+        labels = []
+        n0_data = []
+        for f, values in n0_values_per_file.items():
+            labels.append(os.path.basename(f))
+            n0_data.append(values)
+        plt.boxplot(n0_data, labels=labels)
+        plt.title("Box Plot of N0 Values per File")
+        plt.xlabel("File")
+        plt.ylabel("N0")
+        plt.grid(True)
+        pdf.savefig()
+        plt.close()
+
+        # Aggregated box plots for distance values (if applicable)
         if args.metric in ["hamming", "both"]:
-            # For Hamming, pad sequences so all have equal length.
-            data_hamming = pad_sequences([dict(row) for row in data])
-            sequences_hamming = [row['sequence'] for row in data_hamming]
-            distribution_hamming, distances_hamming = compute_distance_distribution(sequences_hamming, metric="hamming")
-            hamming_distance_values_per_file[filepath] = distances_hamming
-            fig_hamming = create_distance_distribution_figure(distribution_hamming, base, "hamming")
-            figures.append(fig_hamming)
+            plt.figure()
+            labels = []
+            ham_data = []
+            for f, distances in hamming_distance_values_per_file.items():
+                labels.append(os.path.basename(f))
+                ham_data.append(distances)
+            plt.boxplot(ham_data, labels=labels)
+            plt.title("Box Plot of Hamming Distances per File")
+            plt.xlabel("File")
+            plt.ylabel("Hamming Distance")
+            plt.grid(True)
+            pdf.savefig()
+            plt.close()
 
         if args.metric in ["levenshtein", "both"]:
-            # For Levenshtein, use the original sequences (no padding needed).
-            sequences_lev = [row['sequence'] for row in data]
-            distribution_lev, distances_lev = compute_distance_distribution(sequences_lev, metric="levenshtein")
-            levenshtein_distance_values_per_file[filepath] = distances_lev
-            fig_lev = create_distance_distribution_figure(distribution_lev, base, "levenshtein")
-            figures.append(fig_lev)
+            plt.figure()
+            labels = []
+            lev_data = []
+            for f, distances in levenshtein_distance_values_per_file.items():
+                labels.append(os.path.basename(f))
+                lev_data.append(distances)
+            plt.boxplot(lev_data, labels=labels)
+            plt.title("Box Plot of Levenshtein Distances per File")
+            plt.xlabel("File")
+            plt.ylabel("Levenshtein Distance")
+            plt.grid(True)
+            pdf.savefig()
+            plt.close()
 
-        # Save all figures for this file into one PDF.
-        if args.metric == "both":
-            pdf_filename = f"{base}_plots.pdf"
-        else:
-            pdf_filename = f"{base}_{args.metric}_plots.pdf"
-        with PdfPages(pdf_filename) as pdf:
-            for fig in figures:
-                pdf.savefig(fig)
-                plt.close(fig)
-        print(f"Saved plots for {filepath} in '{pdf_filename}'")
-
-    # Aggregated box plot for N0 values (across all files)
-    plt.figure()
-    labels = []
-    n0_data = []
-    for f, values in n0_values_per_file.items():
-        labels.append(os.path.basename(f))
-        n0_data.append(values)
-    plt.boxplot(n0_data, labels=labels)
-    plt.title("Box Plot of N0 Values per File")
-    plt.xlabel("File")
-    plt.ylabel("N0")
-    plt.grid(True)
-    n0_box_pdf = "n0_boxplot.pdf"
-    plt.savefig(n0_box_pdf)
-    print(f"N0 box plot saved as '{n0_box_pdf}'")
-    plt.show()
-
-    # Aggregated box plots for distance values (if applicable)
-    if args.metric in ["hamming", "both"]:
-        plt.figure()
-        labels = []
-        ham_data = []
-        for f, distances in hamming_distance_values_per_file.items():
-            labels.append(os.path.basename(f))
-            ham_data.append(distances)
-        plt.boxplot(ham_data, labels=labels)
-        plt.title("Box Plot of Hamming Distances per File")
-        plt.xlabel("File")
-        plt.ylabel("Hamming Distance")
-        plt.grid(True)
-        ham_box_pdf = "hamming_boxplot.pdf"
-        plt.savefig(ham_box_pdf)
-        print(f"Hamming box plot saved as '{ham_box_pdf}'")
-        plt.show()
-
-    if args.metric in ["levenshtein", "both"]:
-        plt.figure()
-        labels = []
-        lev_data = []
-        for f, distances in levenshtein_distance_values_per_file.items():
-            labels.append(os.path.basename(f))
-            lev_data.append(distances)
-        plt.boxplot(lev_data, labels=labels)
-        plt.title("Box Plot of Levenshtein Distances per File")
-        plt.xlabel("File")
-        plt.ylabel("Levenshtein Distance")
-        plt.grid(True)
-        lev_box_pdf = "levenshtein_boxplot.pdf"
-        plt.savefig(lev_box_pdf)
-        print(f"Levenshtein box plot saved as '{lev_box_pdf}'")
-        plt.show()
+    print(f"All plots saved in '{aggregated_pdf}'.")
 
 
 if __name__ == "__main__":
