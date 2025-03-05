@@ -7,22 +7,64 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-def read_csv_file(filepath, sample_size):
-    """Read a CSV file and return a list of dictionaries."""
+def read_csv_file(filepath, sample_size, min_rows):
+    """
+    Read a CSV file and return a list of dictionaries such that:
+      - The cumulative sum of N0 (from the "N0" column) is at least sample_size.
+      - At least min_rows rows are included.
+
+    The rows are randomly sampled.
+
+    Parameters:
+        filepath (str): Path to the CSV file.
+        sample_size (float): Target cumulative N0 value.
+        min_rows (int): Minimum number of rows to include.
+
+    Returns:
+        List[Dict]: A list of dictionaries corresponding to the sampled rows.
+
+    Raises:
+        ValueError: If the CSV does not contain enough data to meet both conditions.
+    """
+    # Read the CSV file.
     with open(filepath, 'r', newline='') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
 
-        if len(rows) >= 50_000:
-            # Use the provided sample_size if dataset is large.
-            sampled_data = random.sample(rows, sample_size)
-            print("Dataset size bigger than 50_000, sample might be lower than 20%")
-        else:
-            k = int(0.2 * len(rows))
-            sampled_data = random.sample(rows, k)
-            print("Sampling 20% of the dataset")
+    # Shuffle rows to ensure random sampling.
+    random.shuffle(rows)
 
-        return sampled_data
+    cumulative_n0 = 0.0
+    sampled_data = []
+
+    # Iterate over rows and accumulate until both conditions are satisfied.
+    for row in rows:
+        try:
+            n0_value = float(row['N0'])
+        except ValueError:
+            # If conversion fails, skip the row.
+            continue
+
+        sampled_data.append(row)
+        cumulative_n0 += n0_value
+
+        # Check if both conditions are met.
+        if cumulative_n0 >= sample_size and len(sampled_data) >= min_rows:
+            break
+
+    # If conditions are not met after exhausting all rows, raise an error.
+    if cumulative_n0 < sample_size or len(sampled_data) < min_rows:
+        raise ValueError("Insufficient data to meet the required cumulative N0 and minimum row count.")
+
+    return sampled_data
+        #if len(rows) >= 50_000:
+        #    # Use the provided sample_size if dataset is large.
+        #    sampled_data = random.sample(rows, sample_size)
+        #    print("Dataset size bigger than 50_000, sample might be lower than 20%")
+        #else:
+        #    k = int(0.2 * len(rows))
+        #    sampled_data = random.sample(rows, k)
+        #    print("Sampling 20% of the dataset")
 
 
 def pad_sequences(data):
@@ -63,44 +105,65 @@ def levenshtein_distance(s1, s2):
 
 def compute_distance_distribution(sequences, metric="hamming"):
     """
-    Compute the distribution of pairwise distances (Hamming or Levenshtein)
-    using only unique comparisons.
-    Returns a tuple (distribution, distances) where:
-      distribution: dict mapping distance -> count,
-      distances: list of computed distance values.
+    Compute the weighted distribution of pairwise distances (Hamming or Levenshtein)
+    using only unique comparisons between different rows.
+
+    For each pair of rows (i, j) (with i < j), the weight is the product of the N0 values
+    of the two sequences. That is, if one row's count is A and the other's is B, then the
+    computed distance is recorded A * B times.
+
+    Returns a tuple (distribution, weighted_distances) where:
+      - distribution: dict mapping distance -> weighted count,
+      - weighted_distances: list of computed distance values repeated according to the weight.
     """
-    distances = []
+    weighted_distances = []
     n = len(sequences)
     for i in range(n):
         for j in range(i + 1, n):
             if metric == "hamming":
-                d = hamming_distance(sequences[i], sequences[j])
+                d = hamming_distance(sequences[i]['sequence'], sequences[j]['sequence'])
             elif metric == "levenshtein":
-                d = levenshtein_distance(sequences[i], sequences[j])
-            distances.append(d)
+                d = levenshtein_distance(sequences[i]['sequence'], sequences[j]['sequence'])
+            # Multiply the N0 values for the two sequences to determine the weight
+            weight = int(sequences[i]['N0']) * int(sequences[j]['N0'])
+            weighted_distances.extend([d] * weight)
     distribution = {}
-    for d in distances:
+    for d in weighted_distances:
         distribution[d] = distribution.get(d, 0) + 1
-    return distribution, distances
+    return distribution, weighted_distances
 
 
 def create_distance_distribution_figure(distribution, base, metric, source_file):
     """
-    Create a bar chart figure for the distance distribution.
-    The y-axis shows percentage values.
-    Annotate the figure with the source file information.
+    Create two bar chart subplots for the distance distribution.
+    Left subplot: y-axis shows raw counts.
+    Right subplot: y-axis shows raw counts on a logarithmic scale.
+    Both plots are horizontally aligned and annotated with the source file.
     """
-    fig = plt.figure()
     dists = sorted(distribution.keys())
     counts = [distribution[d] for d in dists]
-    total = sum(counts)
-    percentages = [(count / total) * 100 for count in counts]
 
-    plt.bar(dists, percentages, width=0.8, color='skyblue', edgecolor='black')
-    plt.xlabel(f"{metric.capitalize()} Distance")
-    plt.ylabel("Percentage (%)")
-    plt.title(f"{metric.capitalize()} Distance Distribution\nFile: {os.path.basename(source_file)}")
-    plt.grid(True)
+    # Create a figure with two horizontally aligned subplots.
+    fig, axs = plt.subplots(ncols=2, figsize=(12, 5))
+
+    # Left subplot: raw counts.
+    axs[0].bar(dists, counts, width=0.8, color='skyblue', edgecolor='black')
+    axs[0].set_xlim(0, max(dists))
+    axs[0].set_xlabel(f"{metric.capitalize()} Distance")
+    axs[0].set_ylabel("Count")
+    axs[0].set_title(f"{metric.capitalize()} Distance Distribution (Counts)\nFile: {os.path.basename(source_file)}")
+    axs[0].grid(True)
+
+    # Right subplot: raw counts on a logarithmic y-axis.
+    axs[1].bar(dists, counts, width=0.8, color='skyblue', edgecolor='black')
+    axs[1].set_xlim(0, max(dists))
+    axs[1].set_xlabel(f"{metric.capitalize()} Distance")
+    axs[1].set_ylabel("Count (Log Scale)")
+    axs[1].set_title(f"{metric.capitalize()} Distance Distribution (Log Scale)\nFile: {os.path.basename(source_file)}")
+    axs[1].set_yscale('log')
+    axs[1].grid(True)
+
+    fig.tight_layout()
     return fig
 
 
@@ -112,7 +175,8 @@ def main():
     parser.add_argument("--metric", type=str, choices=["hamming", "levenshtein", "both"],
                         default="hamming",
                         help="Distance metric to use: 'hamming' (requires equal length), 'levenshtein', or 'both'.")
-    parser.add_argument("--range", type=int, default=1000, help="Sample size for analysis")
+    parser.add_argument("--sample_size", type=int, default=1000, help="Sample size for analysis")
+    parser.add_argument("--minrows", type=int, default=100, help="Sample size for analysis")
     args = parser.parse_args()
 
     # Dictionaries for aggregated data
@@ -126,25 +190,24 @@ def main():
         # Process each CSV file
         for filepath in args.csv_files:
             print(f"Processing {filepath}...")
-            data = read_csv_file(filepath, args.range)
+            data = read_csv_file(filepath, args.sample_size, args.minrows)
             base, _ = os.path.splitext(filepath)
             n0_values = [int(row['N0']) for row in data]
             n0_values_per_file[filepath] = n0_values
 
             if args.metric in ["hamming", "both"]:
-                # For Hamming, pad sequences so all have equal length.
+                # For Hamming, pad sequences so that all have equal length.
                 data_hamming = pad_sequences([dict(row) for row in data])
-                sequences_hamming = [row['sequence'] for row in data_hamming]
-                distribution_hamming, distances_hamming = compute_distance_distribution(sequences_hamming, metric="hamming")
+                # Compute weighted distances using the modified function.
+                distribution_hamming, distances_hamming = compute_distance_distribution(data_hamming, metric="hamming")
                 hamming_distance_values_per_file[filepath] = distances_hamming
                 fig_hamming = create_distance_distribution_figure(distribution_hamming, base, "hamming", filepath)
                 pdf.savefig(fig_hamming)
                 plt.close(fig_hamming)
 
             if args.metric in ["levenshtein", "both"]:
-                # For Levenshtein, use the original sequences.
-                sequences_lev = [row['sequence'] for row in data]
-                distribution_lev, distances_lev = compute_distance_distribution(sequences_lev, metric="levenshtein")
+                # For Levenshtein, use the original data (with the N0 values).
+                distribution_lev, distances_lev = compute_distance_distribution(data, metric="levenshtein")
                 levenshtein_distance_values_per_file[filepath] = distances_lev
                 fig_lev = create_distance_distribution_figure(distribution_lev, base, "levenshtein", filepath)
                 pdf.savefig(fig_lev)
