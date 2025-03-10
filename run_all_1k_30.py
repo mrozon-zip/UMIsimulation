@@ -12,7 +12,7 @@ commands = []
 
 # PCR method: cycles and mutation_rate parameters.
 for cycles in [15, 25, 30]:
-    for mutation_rate in [0.002, 0.005, 0.01]:
+    for mutation_rate in [0, 0.002, 0.005, 0.01]:
         cmd = [
             "python3", "main.py", "amplify",
             "--method", "pcr",
@@ -24,11 +24,11 @@ for cycles in [15, 25, 30]:
         commands.append(cmd)
 
 # Bridge method: parameters S_radius, density, success_prob, deviation, and mutation_rate.
-for s_radius in [5, 10, 15]:
-    for density in [10, 20, 50]:
-        for success_prob in [0.80, 0.85, 0.9]:
-            for deviation in [0.01, 0.05, 0.1]:
-                for mutation_rate in [0, 0.001, 0.002, 0.005, 0.01]:
+for s_radius in [5, 7.5, 10]:
+    for density in [5, 7.5]:
+        for success_prob in [0.85]:
+            for deviation in [0.05]:
+                for mutation_rate in [0, 0.001, 0.002,]:
                     cmd = [
                         "python3", "main.py", "amplify",
                         "--method", "bridge",
@@ -37,18 +37,18 @@ for s_radius in [5, 10, 15]:
                         "--density", str(density),
                         "--success_prob", str(success_prob),
                         "--deviation", str(deviation),
-                        "--no_simulate",
+                        "--simulate",
                         "--no_plot",
-                        "--output", f"mut_{mutation_rate}_Sr{s_radius}_dens{density}_SP{success_prob}_dev{deviation}.csv"
+                        "--output", f"mut_{mutation_rate}_Sr{s_radius}_dens{density}_SP_{success_prob}_dev{deviation}.csv"
                     ]
                     commands.append(cmd)
 
 # Polonies Amplification method: similar to bridge, but with different S_radius values.
-for s_radius in [5000, 10000, 15000]:
-    for density in [10, 20, 50]:
-        for success_prob in [0.80, 0.85, 0.9]:
-            for deviation in [0.01, 0.05, 0.1]:
-                for mutation_rate in [0, 0.001, 0.002, 0.005, 0.01]:
+for s_radius in [500, 1000, 5000]:
+    for density in [5]:
+        for success_prob in [0.85]:
+            for deviation in [0.05]:
+                for mutation_rate in [0, 0.001, 0.002]:
                     cmd = [
                         "python3", "main.py", "amplify",
                         "--method", "polonies_amplification",
@@ -65,7 +65,7 @@ for s_radius in [5000, 10000, 15000]:
 
 # Run all commands in parallel using a ThreadPoolExecutor.
 # (Choose max_workers based on your system's capacity; here we use 8 as an example.)
-max_workers = 8
+max_workers = 12
 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
     futures = {executor.submit(run_command, cmd): cmd for cmd in commands}
     for future in concurrent.futures.as_completed(futures):
