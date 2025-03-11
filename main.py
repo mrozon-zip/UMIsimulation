@@ -135,14 +135,14 @@ def main():
 
         if args.method in ['polonies_amplification', 'both_13']:
             sequences_bridge = [dict(seq) for seq in sequences]
-            logging.info("Starting Bridge amplification...")
-            sequences_polony_amp, hist_polony_amp, polonies_output = polonies_amplification(
+            logging.info("Starting polonies_amplification...")
+            sequences_polony_amp, hist_polony_amp, final_grid, polonies_output = polonies_amplification(
                 sequences_bridge,
                 mutation_rate=args.mutation_rate,
                 mutation_probabilities=mutation_probabilities,
                 simulate=args.simulate,
                 s_radius=args.S_radius,
-                aoe_radius=args.AOE_radius,
+                aoe_radius=args.AOE_radius,  # This is interpreted as a percentage.
                 density=args.density,
                 success_prob=args.success_prob,
                 deviation=args.deviation,
