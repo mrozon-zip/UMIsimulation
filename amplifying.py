@@ -1,7 +1,6 @@
 import logging
-from support import compute_global_p, process_mutation
+from support import compute_global_p, process_mutation, batch_mutate_sequences
 import os
-import concurrent.futures
 import cupy as cp
 import math, random
 from typing import List, Dict, Tuple, Any
@@ -22,6 +21,22 @@ random.seed(42)
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
 
+
+def encode_sequence(seq: str, max_len: int) -> cp.ndarray:
+    """
+    Convert a string DNA sequence to a CuPy array of length `max_len`,
+    integer-encoded. If seq is shorter than max_len, pad with "A" (0).
+    """
+    arr = [base_to_int[ch] for ch in seq]
+    # Pad if needed
+    arr += [0]*(max_len - len(arr))
+    return cp.array(arr, dtype=cp.int8)
+
+def decode_sequence(seq_array: cp.ndarray) -> str:
+    """
+    Convert a CuPy array of integers back to a DNA string (no trimming).
+    """
+    return "".join(int_to_base[int(x)] for x in seq_array)
 
 def pcr_amplification(sequences: List[Dict[str, Any]],
                       cycles: int,
@@ -78,196 +93,298 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
     pcr_output = f"results/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output
 
-
-def simulate_seq(seq_dict: Dict[str, Any],
-                 num_p: int,
-                 effective_s_radius: float,
-                 aoe_radius: float,
-                 effective_aoe_radius: float,
-                 effective_success_prob: float,
-                 mutation_rate: float,
-                 mutation_probabilities: Dict[str, float]) -> Tuple[List[Dict[str, Any]], List[int]]:
+########################################
+# MAIN FUNCTION: barcodes_amplification
+########################################
+def bridge_amplification(
+        sequences: List[Dict[str, Any]],
+        s_radius: float,
+        simulate: bool,
+        aoe_radius: float,
+        density: float,
+        success_prob: float,
+        deviation: float,
+        mutation_rate: float,
+        mutation_probabilities: Dict[str, float],
+        output: str
+) -> Tuple[List[Dict[str, Any]], List[int], cp.ndarray, str]:
     """
-    Simulate bridge amplification for a single sequence entry.
-    Returns a tuple: (local_seq_list, cycle_counts) where local_seq_list is a list of sequence dicts
-    and cycle_counts is a list of total active A points per cycle.
+    Runs the polonies amplification simulation sequentially for each input sequence.
+    For each input sequence, the entire simulation is run on a fresh grid:
+      - A single point A is placed at the center (using that sequence).
+      - The simulation converts neighboring TYPE_B cells into TYPE_A cells.
+
+    Aggregation:
+      - Merged output: A list of dictionaries for all simulations.
+      - Cycle counts: Elementwise aggregated counts across simulation runs.
+      - Final grid: Taken from the first simulation run.
+      - Output string: Taken from the first simulation run.
     """
-    # Generate P points uniformly in a circle.
-    p_points = []
-    for i in range(num_p):
-        r = effective_s_radius * math.sqrt(random.random())
-        theta = random.uniform(0, 2 * math.pi)
-        x = r * math.cos(theta)
-        y = r * math.sin(theta)
-        p_points.append({'id': i, 'x': x, 'y': y})
-    global_p = p_points  # Available P points
+    aggregated_merged_list = []
+    aggregated_cycle_counts = []
+    final_grid = None
+    final_output_string = ""
 
-    # Define the A point class.
-    class APoint:
-        def __init__(self, sequence, x, y):
-            self.sequence = sequence
-            self.x = x
-            self.y = y
-            self.active = True  # Remains active while candidates exist
+    # Loop over each input sequence and run the simulation sequentially.
+    for idx, seq_dict in enumerate(sequences):
+        seq = seq_dict['sequence']
+        merged_list, cycle_counts, grid, out_str = simulate_single_sequence(
+            seq,
+            s_radius,
+            aoe_radius,
+            density,
+            success_prob,
+            deviation,
+            mutation_rate,
+            mutation_probabilities,
+            output
+        )
+        aggregated_merged_list.extend(merged_list)
+        # Aggregate cycle counts elementwise.
+        for i, count in enumerate(cycle_counts):
+            if i < len(aggregated_cycle_counts):
+                aggregated_cycle_counts[i] += count
+            else:
+                aggregated_cycle_counts.append(count)
+        # Save grid and output string from the first run only.
+        if idx == 0:
+            final_grid = grid
+            final_output_string = out_str
 
-        def distance_to(self, p):
-            return math.hypot(self.x - p['x'], self.y - p['y'])
+    return aggregated_merged_list, aggregated_cycle_counts, final_grid, final_output_string
 
-    # Initialize simulation with one A point at the center.
-    a_points = []
-    local_seq_list = [{"sequence": seq_dict["sequence"], "N0": seq_dict["N0"]}]
-    initial_a = APoint(seq_dict["sequence"], 0, 0)
-    a_points.append(initial_a)
-    active_a = [initial_a]
 
-    # Track the number of A points at each cycle.
+def simulate_single_sequence(
+        seq: str,
+        s_radius: float,
+        aoe_radius: float,
+        density: float,
+        success_prob: float,
+        deviation: float,
+        mutation_rate: float,
+        mutation_probabilities: Dict[str, float],
+        output: str
+) -> Tuple[List[Dict[str, Any]], List[int], cp.ndarray, str]:
+    """
+    Runs a single simulation for one sequence.
+    The simulation:
+      - Initializes a grid with available cells set to TYPE_B.
+      - Places one point A at the center using the provided sequence.
+      - Runs the amplification loop where each A cell converts a neighboring B cell into A.
+    Returns:
+      - A merged list (list of dicts with sequences and counts).
+      - A list of cycle counts (active cell counts per cycle).
+      - The final grid (point_type array).
+      - An output string.
+    """
+    # Setup for a single sequence
+    max_len = len(seq)
+    encoded = encode_sequence(seq, max_len)
+    # all_sequences starts with just one row (the encoded sequence)
+    all_sequences = cp.expand_dims(encoded, axis=0)
+    barcode_ids = cp.array([0], dtype=cp.int32)
+
+    # Define resolution and grid size
+    res = math.sqrt(1000)
+    grid_size = int(round(2 * s_radius * res))
+    center = s_radius * res
+
+    # Create grid arrays on GPU: point_type and seq_id.
+    point_type = cp.full((grid_size, grid_size), TYPE_UNAVAILABLE, dtype=cp.int8)
+    seq_id = cp.full((grid_size, grid_size), -1, dtype=cp.int32)
+
+    # Fill available cells with TYPE_B within a circular region.
+    coords_i = cp.arange(grid_size)
+    coords_j = cp.arange(grid_size)
+    i_grid, j_grid = cp.meshgrid(coords_i, coords_j, indexing='ij')
+    dist_to_center = cp.sqrt((i_grid - center) ** 2 + (j_grid - center) ** 2)
+    within_circle = dist_to_center < (s_radius * res)
+    fill_mask = (cp.random.rand(grid_size, grid_size) < (density / 100))
+    combined_mask = within_circle & fill_mask
+    point_type = cp.where(combined_mask, TYPE_B, point_type)
+
+    # Place a single point A at the center with the provided sequence.
+    i_center = int(round(center))
+    j_center = int(round(center))
+    point_type[i_center, j_center] = TYPE_A
+    seq_id[i_center, j_center] = barcode_ids[0]
+    active_i = cp.array([i_center], dtype=cp.int32)
+    active_j = cp.array([j_center], dtype=cp.int32)
+    active_seq_ids = cp.array([barcode_ids[0]], dtype=cp.int32)
+
+    effective_aoe = (aoe_radius / 100) * s_radius * res
     cycle_counts = []
-    cycle = 0
+    max_cycles = 1000
 
-    # Main simulation loop.
-    while global_p and active_a:
-        cycle_counts.append(len(a_points))
+    def vector_convert_parents_to_targets(
+            parent_i: cp.ndarray,
+            parent_j: cp.ndarray,
+            parent_seq_ids: cp.ndarray,
+            parent_type_val: int,
+            target_type_val: int,
+            all_sequences: cp.ndarray
+    ) -> Tuple[cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray]:
+        """
+        For each parent cell in (parent_i, parent_j), attempts to convert one target cell of type `target_type_val`
+        (e.g., TYPE_B) into a new cell of type `parent_type_val` (e.g., TYPE_A) within the effective area of effect.
+        This implementation:
+          1. Restricts the target search to a bounding box around the parents.
+          2. Uses chunked computation to avoid large temporary arrays.
+          3. Uses cp.float16 for reduced precision in distance calculations.
+        Returns:
+          (child_i, child_j, child_seq_ids, updated_all_sequences)
+        """
+        # Return empty arrays if there are no parents.
+        if parent_i.size == 0:
+            return (cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    all_sequences)
 
-        # Each active A checks for at least one available P point within its AOE.
-        for a in active_a:
-            candidates = [p for p in global_p if a.distance_to(p) <= aoe_radius]
-            if not candidates:
-                a.active = False
+        # Gather target coordinates from the grid.
+        target_coords = cp.argwhere(point_type == target_type_val)
+        if target_coords.size == 0:
+            return (cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    all_sequences)
 
-        active_a = [a for a in active_a if a.active]
-        if not active_a:
+        # Separate target coordinates.
+        ti_all = target_coords[:, 0]
+        tj_all = target_coords[:, 1]
+
+        # 2. Restrict search region: compute a bounding box around the parent cells with margin = effective_aoe.
+        parent_min_i = cp.min(parent_i)
+        parent_max_i = cp.max(parent_i)
+        parent_min_j = cp.min(parent_j)
+        parent_max_j = cp.max(parent_j)
+        margin = effective_aoe  # effective_aoe should be defined in your simulation.
+        region_mask = (ti_all >= parent_min_i - margin) & (ti_all <= parent_max_i + margin) & \
+                      (tj_all >= parent_min_j - margin) & (tj_all <= parent_max_j + margin)
+        ti = ti_all[region_mask]
+        tj = tj_all[region_mask]
+        if ti.size == 0:
+            return (cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    all_sequences)
+
+        # 1. & 3. Chunk the distance computation using reduced precision.
+        chunk_size = 1000  # Adjust this value according to available memory.
+        num_targets = ti.shape[0]
+        num_parents = parent_i.shape[0]
+
+        # For each parent, we'll track the best candidate (target index) and its distance.
+        candidate_indices = -cp.ones(num_parents, dtype=cp.int32)
+        candidate_distances = cp.full((num_parents,), effective_aoe + 1, dtype=cp.float16)
+
+        # Cast parent's coordinates to float16.
+        parent_i_f16 = parent_i.astype(cp.float16)
+        parent_j_f16 = parent_j.astype(cp.float16)
+
+        for start in range(0, num_targets, chunk_size):
+            end = min(start + chunk_size, num_targets)
+            # Cast the chunk of target coordinates to float16.
+            chunk_ti = ti[start:end].astype(cp.float16)
+            chunk_tj = tj[start:end].astype(cp.float16)
+            # Compute the distance matrix for the current chunk.
+            # Shape: (num_parents, current_chunk_size)
+            di_chunk = parent_i_f16[:, None] - chunk_ti[None, :]
+            dj_chunk = parent_j_f16[:, None] - chunk_tj[None, :]
+            dist_chunk = cp.sqrt(di_chunk * di_chunk + dj_chunk * dj_chunk)
+
+            # For each parent, find the minimum distance in this chunk.
+            min_dist_chunk = cp.min(dist_chunk, axis=1)
+            argmin_chunk = cp.argmin(dist_chunk, axis=1)
+
+            # Update the candidate if the found distance is lower than the current candidate.
+            update_mask = min_dist_chunk < candidate_distances
+            candidate_distances[update_mask] = min_dist_chunk[update_mask]
+            candidate_indices[update_mask] = start + argmin_chunk[update_mask]
+
+        # Determine which parents found a valid candidate within effective_aoe.
+        valid_parents_mask = candidate_distances <= effective_aoe
+        valid_parent_indices = cp.argwhere(valid_parents_mask).ravel()
+        if valid_parent_indices.size == 0:
+            return (cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    cp.array([], dtype=cp.int32),
+                    all_sequences)
+
+        # For these parents, retrieve the corresponding target coordinates.
+        chosen_target_indices = candidate_indices[valid_parent_indices]
+        child_i = ti[chosen_target_indices]
+        child_j = tj[chosen_target_indices]
+        child_parents_seq = parent_seq_ids[valid_parent_indices]
+
+        # Apply success probability with deviation.
+        random_dev = cp.random.uniform(-deviation, deviation, size=child_i.shape)
+        eff_success_probs = cp.clip(success_prob * (1 + random_dev), 0, 1)
+        success_draws = cp.random.rand(child_i.size)
+        success_mask = success_draws < eff_success_probs
+        child_i = child_i[success_mask]
+        child_j = child_j[success_mask]
+        child_parents_seq = child_parents_seq[success_mask]
+
+        if child_i.size == 0:
+            return (child_i, child_j, child_parents_seq, all_sequences)
+
+        # Process mutations and update the sequence layer.
+        updated_all_sequences, new_child_seq_ids = batch_mutate_sequences(
+            child_parents_seq,
+            all_sequences,
+            mutation_rate,
+            mutation_probabilities
+        )
+
+        # Mark the grid cells as converted.
+        point_type[child_i, child_j] = parent_type_val
+        seq_id[child_i, child_j] = new_child_seq_ids
+
+        return (child_i, child_j, new_child_seq_ids, updated_all_sequences)
+
+    # Main simulation loop: each cycle, convert neighboring TYPE_B cells to TYPE_A.
+    for cycle in range(max_cycles):
+        if active_i.size == 0:
             break
 
-        pending = set(active_a)
-        # (Optional) Print number of pending A points.
-
-        # Process connection proposals.
-        while pending:
-            proposals = {}
-            remove_from_pending = set()
-            for a in list(pending):
-                candidates = [p for p in global_p if a.distance_to(p) <= effective_aoe_radius]
-                if not candidates:
-                    remove_from_pending.add(a)
-                else:
-                    chosen = random.choice(candidates)
-                    proposals.setdefault(chosen['id'], []).append(a)
-            pending -= remove_from_pending
-            if not proposals:
-                break
-            for p_id, a_list in proposals.items():
-                p_obj = next((p for p in global_p if p['id'] == p_id), None)
-                if p_obj is None:
-                    continue  # Candidate already taken.
-                success_list = []
-                for a in a_list:
-                    if a in pending and random.random() < effective_success_prob:
-                        success_list.append(a)
-                if not success_list:
-                    for a in a_list:
-                        pending.discard(a)
-                else:
-                    winner = random.choice(success_list)
-                    mutated_seq, mutation_occurred = process_mutation(
-                        winner.sequence,
-                        mutation_rate,
-                        mutation_probabilities
-                    )
-                    # Update the local sequence list.
-                    found = False
-                    for local_dict in local_seq_list:
-                        if local_dict["sequence"] == mutated_seq:
-                            local_dict["N0"] += 1
-                            found = True
-                            break
-                    if not found:
-                        local_seq_list.append({"sequence": mutated_seq, "N0": 1})
-                    # Create a new A point.
-                    new_a = APoint(mutated_seq, p_obj['x'], p_obj['y'])
-                    a_points.append(new_a)
-                    active_a.append(new_a)
-                    # Remove the candidate P point.
-                    global_p = [p for p in global_p if p['id'] != p_id]
-                    for a in a_list:
-                        pending.discard(a)
-        active_a = [a for a in a_points if a.active]
-        cycle += 1
-
-    return local_seq_list, cycle_counts
+        child_a_i, child_a_j, child_a_seq_ids, all_sequences = vector_convert_parents_to_targets(
+            active_i, active_j, active_seq_ids,
+            TYPE_A,
+            TYPE_B,
+            all_sequences
+        )
 
 
-def bridge_amplification(sequences: List[Dict[str, Any]],
-                         simulate: bool,
-                         mutation_rate: float,
-                         mutation_probabilities: Dict[str, float],
-                         s_radius: float,
-                         aoe_radius: float,
-                         density: float,
-                         success_prob: float,
-                         deviation: float,
-                         output: str) -> Tuple[List[Dict[str, Any]], List[int], str]:
-    """
-    Perform Bridge amplification simulation.
-    Each cycle applies a random deviation (±10% by default) to parameters S, density, and success probability.
-    The effective success probability (after deviation) is used as the chance for amplification.
-    Returns the final merged sequence list and a history of total unique sequences per cycle.
-    """
-    simulation_index = simulate  # To track whether to animate (unused in parallel execution)
-    # Calculate common parameters (applied to all simulations).
-    effective_s_radius = s_radius * (1 + random.uniform(-deviation, deviation))
-    effective_density = density * (1 + random.uniform(-deviation, deviation))
-    effective_s = math.pi * effective_s_radius ** 2
-    num_p = int(effective_density * effective_s)
-    effective_success_prob = success_prob * (1 + random.uniform(-deviation, deviation))
-    effective_success_prob = min(effective_success_prob, 1.0)
-    effective_aoe_radius = aoe_radius * (1 + random.uniform(-deviation, deviation))
+        total_active = active_i.size + child_a_i.size
+        cycle_counts.append(int(total_active))
+        if child_a_i.size == 0:
+            break
+        active_i = cp.concatenate([active_i, child_a_i])
+        active_j = cp.concatenate([active_j, child_a_j])
+        active_seq_ids = cp.concatenate([active_seq_ids, child_a_seq_ids])
 
-    # Use parallel processing to run each simulation (each seq_dict) independently.
-    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-        results = list(executor.map(
-            simulate_seq,
-            sequences,
-            [num_p] * len(sequences),
-            [effective_s_radius] * len(sequences),
-            [aoe_radius] * len(sequences),
-            [effective_aoe_radius] * len(sequences),
-            [effective_success_prob] * len(sequences),
-            [mutation_rate] * len(sequences),
-            [mutation_probabilities] * len(sequences)
-        ))
+    # Merge duplicates from TYPE_A cells.
+    is_a_mask = (point_type == TYPE_A)
+    a_coords = cp.argwhere(is_a_mask)
+    a_seq_ids = seq_id[a_coords[:, 0], a_coords[:, 1]]
+    if a_seq_ids.size == 0:
+        return [], [0], point_type, output
 
-    # Merge results from all simulations.
-    merged_sequences = []
-    all_cycle_counts = []
-    for local_seq_list, cycle_counts in results:
-        all_cycle_counts.append(cycle_counts)
-        for d in local_seq_list:
-            found = False
-            for md in merged_sequences:
-                if md["sequence"] == d["sequence"]:
-                    md["N0"] += d["N0"]
-                    found = True
-                    break
-            if not found:
-                merged_sequences.append(d)
+    uniq_ids, counts = cp.unique(a_seq_ids, return_counts=True)
+    uniq_ids_host = uniq_ids.get()
+    counts_host = counts.get()
 
-    # Determine the maximum cycle count length and pad each cycle_counts list.
-    if all_cycle_counts:
-        max_length = max(len(x) for x in all_cycle_counts)
-        padded_all_cycle_counts = []
-        for lst in all_cycle_counts:
-            if len(lst) < max_length:
-                lst.extend([lst[-1]] * (max_length - len(lst)))
-            padded_all_cycle_counts.append(lst)
-        # Compute element-wise sum over all cycle_counts lists.
-        history_bridge = [sum(x) for x in zip(*padded_all_cycle_counts)]
-    else:
-        history_bridge = []
+    merged_list = []
+    for uid, cnt in zip(uniq_ids_host, counts_host):
+        if uid < 0 or uid >= all_sequences.shape[0]:
+            continue
+        seq_array = all_sequences[uid]
+        seq_str = decode_sequence(seq_array)
+        merged_list.append({"sequence": seq_str, "N0": int(cnt)})
 
-    base, ext = os.path.splitext(output)
-    bridge_output = f"results/bridge_{base}{ext}"
-    print(f"Length of merged_sequences: {len(merged_sequences)}")
-    return merged_sequences, history_bridge, bridge_output
+    polonies_output = f"results/polonies_{output}"
+    return merged_list, cycle_counts, point_type, polonies_output
 
 
 # -----------------------------------------------------------------------------
@@ -325,62 +442,6 @@ def bridge_amplification(sequences: List[Dict[str, Any]],
 #         - The final grid,
 #         - And an output file name string.
 # -----------------------------------------------------------------------------
-
-
-def encode_sequence(seq: str, max_len: int) -> cp.ndarray:
-    """
-    Convert a string DNA sequence to a CuPy array of length `max_len`,
-    integer-encoded. If seq is shorter than max_len, pad with "A" (0).
-    """
-    arr = [base_to_int[ch] for ch in seq]
-    # Pad if needed
-    arr += [0] * (max_len - len(arr))
-    return cp.array(arr, dtype=cp.int8)
-
-
-def decode_sequence(seq_array: cp.ndarray) -> str:
-    """
-    Convert a CuPy array of integers back to a DNA string (no trimming).
-    """
-    return "".join(int_to_base[int(x)] for x in seq_array)
-
-
-def batch_mutate_sequences(
-        parent_ids: cp.ndarray,
-        all_sequences: cp.ndarray,
-        mutation_rate: float,
-        mutation_probabilities: Dict[str, float]
-) -> Tuple[cp.ndarray, cp.ndarray]:
-    """
-    Vectorized mutation of many sequences at once on the GPU.
-    - parent_ids: shape (N,) array of indices into `all_sequences`.
-    - all_sequences: shape (num_sequences, seq_len).
-    - mutation_rate: probability per base to mutate.
-    - mutation_probabilities: e.g. {"substitution": 0.4, "deletion": 0.3, "insertion": 0.3}
-      (Here we only implement substitution for simplicity).
-
-    Returns:
-      updated_all_sequences: possibly expanded version of all_sequences with new child sequences appended
-      new_seq_ids: shape (N,) array of new sequence IDs in updated_all_sequences
-    """
-    # For simplicity, we'll do only random substitutions with probability = mutation_rate.
-    parent_batch = all_sequences[parent_ids]  # shape (N, seq_len)
-
-    # Create a random uniform matrix for deciding which bases to mutate.
-    mut_mask = cp.random.rand(*parent_batch.shape) < mutation_rate
-
-    # For mutated positions, choose a random base from [0..3].
-    random_bases = cp.random.randint(0, 4, size=parent_batch.shape, dtype=cp.int8)
-
-    # child_batch picks random_bases where mut_mask is True, else original parent base
-    child_batch = cp.where(mut_mask, random_bases, parent_batch)
-
-    # Append child_batch to the end of all_sequences
-    new_seq_start = all_sequences.shape[0]
-    updated_all_sequences = cp.concatenate([all_sequences, child_batch], axis=0)
-    new_seq_ids = cp.arange(new_seq_start, new_seq_start + parent_batch.shape[0], dtype=cp.int32)
-
-    return updated_all_sequences, new_seq_ids
 
 
 def polonies_amplification(

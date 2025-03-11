@@ -7,8 +7,10 @@ from denoise import Denoiser
 from amplifying import pcr_amplification, bridge_amplification, polonies_amplification
 from generate import generate_sequences
 import os
+import numpy as np
 
 os.makedirs("results", exist_ok=True)
+
 
 def main():
     parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
@@ -113,7 +115,7 @@ def main():
         if args.method in ['bridge', 'both_12']:
             sequences_bridge = [dict(seq) for seq in sequences]
             logging.info("Starting Bridge amplification...")
-            sequences_bridge_amp, history_bridge, bridge_output = bridge_amplification(
+            sequences_bridge_amp, history_bridge, grid, bridge_output = bridge_amplification(
                 sequences_bridge,
                 mutation_rate=args.mutation_rate,
                 mutation_probabilities=mutation_probabilities,
@@ -131,6 +133,11 @@ def main():
                 writer.writeheader()
                 for seq_dict in sequences_bridge_amp:
                     writer.writerow(seq_dict)
+            # Convert the final_grid (a cp.ndarray) to a NumPy array.
+            grid_numpy = grid.get()  # or cp.asnumpy(final_grid)
+
+            # Write the array to a text file with integer formatting.
+            np.savetxt("final_grid.txt", grid_numpy, fmt="%d")
             logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
 
         if args.method in ['polonies_amplification', 'both_13']:
