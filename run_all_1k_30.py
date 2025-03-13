@@ -63,6 +63,19 @@ for s_radius in [10, 20, 30]:
                     ]
                     commands.append(cmd)
 
+# Run all commands in parallel using a ThreadPoolExecutor.
+# (Choose max_workers based on your system's capacity; here we use 8 as an example.)
+max_workers = 12
+with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    futures = {executor.submit(run_command, cmd): cmd for cmd in commands}
+    for future in concurrent.futures.as_completed(futures):
+        cmd = futures[future]
+        try:
+            future.result()
+        except Exception as exc:
+            print(f"Command {' '.join(cmd)} generated an exception: {exc}")
+        else:
+            print(f"Command {' '.join(cmd)} completed successfully.")
 
 # After all amplification commands are finished, run hamming_distance.py on the results.
 csv_files = glob.glob("results1/*.csv")
