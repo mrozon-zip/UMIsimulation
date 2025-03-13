@@ -76,7 +76,7 @@ def process_file(file_path, true_seqs):
 # ----------------------------
 def main():
     true_barcodes_file = "true_barcodes.csv"
-    results_folder = "results"
+    results_folder = "results1"
     summary_csv = "barcode_counts_summary.csv"
     pdf_filename = "barcode_plots.pdf"
 

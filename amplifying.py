@@ -8,6 +8,7 @@ import numpy as np
 import csv
 from scipy.spatial import cKDTree
 from support import process_mutation
+import shutil
 
 # Example DNA base mapping and inverse mapping:
 base_to_int = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
@@ -551,6 +552,12 @@ def polonies_amplification(s_radius: float,
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
     cleared_sequences = {}  # key: sequence, value: cumulative N0
 
+    # Define the folder where the supporting files will be saved
+    folder_path = 'supporting_folder'
+
+    # Define the output file for concatenated results
+    output_file_path = 'cleared_sequences.csv'
+
     cycle_num = 0
     while True:
         cycle_num += 1
@@ -560,15 +567,6 @@ def polonies_amplification(s_radius: float,
         # Termination: if no active a points remain, break.
         if len(a_points_active) == 0:
             break
-
-        # If there are no available p points at all, then none of the remaining a points can connect.
-        #if len(p_points) == 0:
-        #    # All remaining a points are cleared.
-        #    for point in a_points_active:
-        #        seq = point['sequence']
-        #        cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
-        #    a_points_active = np.empty(0, dtype=a_points_active.dtype)
-        #    break
 
         # --- Determine pending p points ---
         # Build a KDTree on p_points.
@@ -585,6 +583,26 @@ def polonies_amplification(s_radius: float,
             for point in a_points_active[no_pending_mask]:
                 seq = point['sequence']
                 cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
+
+
+            # SWITCH IT TO SUPPORTING METHOD
+            # make sure the folder exists, if not, create it
+            os.makedirs(folder_path, exist_ok=True)
+
+            # Define the CSV file path with cycle number
+            csv_file_path = os.path.join(folder_path, f'cleared_sequences{cycle_num}.csv')
+
+            # Write the dictionary to a CSV file
+            with open(csv_file_path, mode='w', newline='') as file:
+                writer = csv.writer(file)
+
+                # Write the header
+                writer.writerow(['sequence', 'N0'])
+
+                # Write the data (sequence, N0)
+                for seq, N0 in cleared_sequences.items():
+                    writer.writerow([seq, N0])
+
             # Keep only those with at least one nearby p point.
             a_points_active = a_points_active[~no_pending_mask]
             # Also update coords_a and query_results accordingly.
@@ -668,23 +686,69 @@ def polonies_amplification(s_radius: float,
         else:
             a_points_active = np.empty(0, dtype=a_points_active.dtype)
 
+    # Create a list to hold the rows from all CSV files
+    all_rows = []
+
+    # Iterate over all files in the folder
+    for filename in os.listdir(folder_path):
+        # Check if the file is a CSV file
+        if filename.endswith('.csv'):
+            file_path = os.path.join(folder_path, filename)
+
+            # Open the CSV file and read its content
+            with open(file_path, mode='r', newline='') as file:
+                reader = csv.reader(file)
+                # Skip the header if it's not the first file
+                if all_rows:
+                    next(reader)  # Skip header row
+                # Add all rows from this file to the all_rows list
+                all_rows.extend(reader)
+
+            # Delete the original CSV file
+            os.remove(file_path)
+
+    # Write the combined rows into the final 'cleared_sequences.csv' file
+    with open(output_file_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+
+        # Write the header
+        writer.writerow(['sequence', 'N0'])
+
+        # Write the combined data
+        writer.writerows(all_rows)
+
+    # Delete the folder after the files are combined and deleted
+    shutil.rmtree(folder_path)
+
     # End simulation cycles.
     print("Simulation ended.")
 
-    # Write final output CSV file.
-    # Collapse duplicate sequences by summing N0 counts.
-    with open(output, 'w', newline='') as csvfile:
-        fieldnames = ['sequence', 'N0']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for seq, count in cleared_sequences.items():
-            writer.writerow({'sequence': seq, 'N0': count})
-    print(f"Final output CSV written to {output}")
+    # Create a dictionary to collapse duplicates.
+    dedup = {}
+
+    with open("cleared_sequences.csv", "r", newline="") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            # Skip rows that are duplicate headers.
+            if row["sequence"] == "sequence":
+                continue
+            encoded_seq = row["sequence"]
+            try:
+                n0 = int(row["N0"])
+            except ValueError:
+                continue  # skip rows with invalid N0 values
+            # If the encoded sequence is already seen, add the count; otherwise, create new entry.
+            if encoded_seq in dedup:
+                dedup[encoded_seq] += n0
+            else:
+                dedup[encoded_seq] = n0
+
+    # Build the final list of deduplicated and decoded rows.
     sequences_polony_amp = []
-    for encoded_seq, n0 in cleared_sequences.items():
-        decoded = decode(encoded_seq)
-        dictionary = {'sequence': decoded, 'N0': n0}
-        sequences_polony_amp.append(dictionary)
+    for encoded_seq, total_n0 in dedup.items():
+        decoded_seq = decode(encoded_seq)
+        sequences_polony_amp.append({"sequence": decoded_seq, "N0": total_n0})
+
     bridge_output = output
 
     return sequences_polony_amp, bridge_output
