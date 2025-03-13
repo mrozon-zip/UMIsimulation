@@ -133,26 +133,22 @@ def main():
                 writer.writeheader()
                 for seq_dict in sequences_bridge_amp:
                     writer.writerow(seq_dict)
-            # Convert the final_grid (a cp.ndarray) to a NumPy array.
-            grid_numpy = grid.get()  # or cp.asnumpy(final_grid)
 
-            # Write the array to a text file with integer formatting.
-            np.savetxt("final_grid.txt", grid_numpy, fmt="%d")
             logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
 
         if args.method in ['polonies_amplification', 'both_13']:
             sequences_bridge = [dict(seq) for seq in sequences]
             logging.info("Starting polonies_amplification...")
-            sequences_polony_amp, hist_polony_amp, final_grid, polonies_output = polonies_amplification(
-                sequences_bridge,
-                mutation_rate=args.mutation_rate,
-                mutation_probabilities=mutation_probabilities,
-                simulate=args.simulate,
+            sequences_polony_amp, polonies_output = polonies_amplification(
                 s_radius=args.S_radius,
-                aoe_radius=args.AOE_radius,  # This is interpreted as a percentage.
                 density=args.density,
+                sequences=sequences_bridge,
+                aoe_radius=args.AOE_radius,
                 success_prob=args.success_prob,
                 deviation=args.deviation,
+                simulate=args.simulate,
+                mutation_rate=args.mutation_rate,
+                mutation_probabilities=mutation_probabilities,
                 output=args.output,
             )
             with open(polonies_output, 'w', newline='') as csvfile:

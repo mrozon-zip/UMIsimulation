@@ -1,9 +1,13 @@
 import logging
-from support import compute_global_p, process_mutation, batch_mutate_sequences
+from support import compute_global_p, process_mutation, batch_mutate_sequences, decode, encode
 import os
 import cupy as cp
 import math, random
 from typing import List, Dict, Tuple, Any
+import numpy as np
+import csv
+from scipy.spatial import cKDTree
+from support import process_mutation
 
 # Example DNA base mapping and inverse mapping:
 base_to_int = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
@@ -393,17 +397,17 @@ def simulate_single_sequence(
 # This implementation uses a NumPy 3D array to represent the spatial grid.
 #
 # 1. The grid’s first two dimensions represent a plane of size
-#    (2 * S_radius * res) x (2 * S_radius * res), where the resolution factor
+#    (2 * s_radius * res) x (2 * s_radius * res), where the resolution factor
 #    res = √1000 ≈ 31.62. For example:
-#       - If S_radius = 5, grid dimensions ≈ round(2*5*31.62) = 316 x 316,
+#       - If s_radius = 5, grid dimensions ≈ round(2*5*31.62) = 316 x 316,
 #         and the number of available spots (cells inside the working circle)
 #         is approximately π*(5*31.62)² ≈ 78,500.
-#       - If S_radius = 10, available spots ≈ π*(10*31.62)² ≈ 314,000.
+#       - If s_radius = 10, available spots ≈ π*(10*31.62)² ≈ 314,000.
 #
-# 2. The working area is defined as the circle centered at (S_radius, S_radius)
-#    in physical units, which translates to a center at (S_radius*res, S_radius*res)
+# 2. The working area is defined as the circle centered at (s_radius, s_radius)
+#    in physical units, which translates to a center at (s_radius*res, s_radius*res)
 #    in grid coordinates. A cell (i, j) is available if its Euclidean distance from
-#    the center is less than S_radius * res.
+#    the center is less than s_radius * res.
 #
 # 3. The grid has a third “dimension” of size 2:
 #       - Field 0 stores the point type:
@@ -425,8 +429,8 @@ def simulate_single_sequence(
 #       - Every active point (A or C) searches within its neighborhood for target cells:
 #             A points only convert neighboring B cells,
 #             C points only convert neighboring D cells.
-#       - The effective AOE (in grid cells) is computed as (aoe_radius/100) * S_radius * res.
-#       - For each candidate cell found within the AOE (using Euclidean distance),
+#       - The effective aoe (in grid cells) is computed as (aoe_radius/100) * s_radius * res.
+#       - For each candidate cell found within the aoe (using Euclidean distance),
 #         a conversion attempt is made using an effective success probability (success_prob
 #         adjusted by a random deviation ±deviation). On success, process_mutation is applied
 #         to the parent's sequence, and the target cell is converted to the parent's type (A or C)
@@ -444,10 +448,64 @@ def simulate_single_sequence(
 # -----------------------------------------------------------------------------
 
 
-def polonies_amplification(
-        sequences: List[Dict[str, Any]],
+def generate_points(s_radius: float, density: float) -> np.ndarray:
+    """
+    Generate p_points as a numpy array of (x, y) coordinates uniformly distributed within
+    a circle of radius s_radius. The total number is given by density * (π * s_radius^2).
+    """
+    total_points = int(density * math.pi * (s_radius ** 2))
+    # Use polar coordinates for uniform sampling.
+    r = s_radius * np.sqrt(np.random.rand(total_points))
+    theta = 2 * np.pi * np.random.rand(total_points)
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+    return np.column_stack((x, y))
+
+
+def generate_a_points(sequences: list, s_radius: float) -> np.ndarray:
+    """
+    Generate a numpy structured array for active a points.
+    Each entry gets a random coordinate within the circle of radius s_radius and
+    carries the sequence and its N0 value.
+    """
+    # Define a structured dtype: x, y (floats), sequence (object), N0 (int)
+    dtype = np.dtype([('x', np.float64), ('y', np.float64), ('sequence', 'O'), ('N0', np.int64)])
+    n = len(sequences)
+    a_points = np.empty(n, dtype=dtype)
+
+    # Generate random coordinates in circle
+    r = s_radius * np.sqrt(np.random.rand(n))
+    theta = 2 * np.pi * np.random.rand(n)
+    a_points['x'] = r * np.cos(theta)
+    a_points['y'] = r * np.sin(theta)
+
+    # Assign sequence and N0 from input dictionaries.
+    for i, seq_dict in enumerate(sequences):
+        a_points['sequence'][i] = encode(seq_dict["sequence"])
+        a_points['N0'][i] = seq_dict["N0"]
+    return a_points
+
+def generate_new_a_points(new_a_points_list: list) -> np.ndarray:
+    """
+    Generate a numpy structured array for active a points.
+    Each entry gets a random coordinate within the circle of radius s_radius and
+    carries the sequence and its N0 value.
+    """
+    # Define a structured dtype: x, y (floats), sequence (object), N0 (int)
+    dtype = np.dtype([('x', np.float64), ('y', np.float64), ('sequence', 'O'), ('N0', np.int64)])
+    n = len(new_a_points_list)
+    new_a_points_array = np.empty(n, dtype=dtype)
+
+    # Assign sequence and N0 from input dictionaries.
+    for i, seq_dict in enumerate(new_a_points_list):
+        new_a_points_array['sequence'][i] = seq_dict["sequence"]
+        new_a_points_array['N0'][i] = seq_dict["N0"]
+    return new_a_points_array
+
+"""
+(
+        seq: str,
         s_radius: float,
-        simulate: bool,
         aoe_radius: float,
         density: float,
         success_prob: float,
@@ -456,237 +514,179 @@ def polonies_amplification(
         mutation_probabilities: Dict[str, float],
         output: str
 ) -> Tuple[List[Dict[str, Any]], List[int], cp.ndarray, str]:
+"""
+
+
+def polonies_amplification(s_radius: float,
+                            density: float,
+                            sequences: list,
+                            aoe_radius: float,
+                            success_prob: float,
+                            deviation: float,
+                            simulate: bool,
+                            mutation_rate: float,
+                            mutation_probabilities: Dict[str,float],
+                            output: str = "final_output.csv"):
     """
-    Demonstration of a GPU-accelerated polonies amplification using CuPy.
-    Encodes sequences as integer arrays, uses vectorized neighbor search,
-    and batch mutation on the GPU. No 'nonlocal' usage for clarity.
+    Runs the simulation.
+
+    - p_points: All points within the circle of radius s_radius (generated using density).
+    - a_points_active: Each active a point (with coordinate, sequence, and N0) is generated from
+      the input list 'sequences'.
+    - aoe_radius is directly provided and represents the radius of the area of effect for each a point.
+    - In each cycle, all p_points that lie within any a point's aoe are removed from p_points and
+      assigned to pending_p_points. Then every active a point tries to pick one p point (from pending)
+      that lies within its own aoe – if successful (according to success_prob) then that connection
+      is accepted (collisions resolved randomly), processed via process_mutation, and the a point is
+      moved to the next cycle. Active a points that at the beginning of a cycle have no p point
+      in their aoe are removed (their sequence is saved for CSV output).
+    - The simulation repeats cycles until no active a points remain.
+    - Finally, a CSV file is written with header: sequence,N0, where duplicate sequences are
+      collapsed with N0 counts summed.
     """
+    # Generate initial points.
+    p_points = generate_points(s_radius, density) # np.array
+    a_points_active = generate_a_points(sequences, s_radius) # np.array
 
-    # 1) Convert input list of dicts into a plain list of sequences
-    input_seqs = [seq_dict['sequence'] for seq_dict in sequences]
-    max_len = max(len(s) for s in input_seqs)
+    # Dictionary to collect sequences from a points that are removed (cleared from memory).
+    cleared_sequences = {}  # key: sequence, value: cumulative N0
 
-    # 2) Create a big "all_sequences" array storing each input sequence as a row
-    encoded_list = [encode_sequence(seq, max_len) for seq in input_seqs]
-    all_sequences = cp.stack(encoded_list, axis=0)  # shape (num_input, max_len)
+    cycle_num = 0
+    while True:
+        cycle_num += 1
+        print(f"Cycle {cycle_num}: {len(a_points_active)} active a points, {len(p_points)} remaining p points")
 
-    # 3) We'll store (row index) for each input sequence
-    barcode_ids = cp.arange(len(input_seqs), dtype=cp.int32)
-
-    # 4) Define resolution and grid size
-    res = math.sqrt(1000)
-    grid_size = int(round(2 * s_radius * res))
-    center = s_radius * res
-
-    # 5) Create two 2D arrays on GPU
-    #   - point_type: (grid_size, grid_size), int8
-    #   - seq_id:     (grid_size, grid_size), int32
-    point_type = cp.full((grid_size, grid_size), TYPE_UNAVAILABLE, dtype=cp.int8)
-    seq_id = cp.full((grid_size, grid_size), -1, dtype=cp.int32)
-
-    # Fill available cells with B or D according to density
-    coords_i = cp.arange(grid_size)
-    coords_j = cp.arange(grid_size)
-    i_grid, j_grid = cp.meshgrid(coords_i, coords_j, indexing='ij')  # shape (grid_size, grid_size)
-
-    # Distance from center
-    dist_to_center = cp.sqrt((i_grid - center) ** 2 + (j_grid - center) ** 2)
-    within_circle = dist_to_center < (s_radius * res)
-
-    fill_mask = (cp.random.rand(grid_size, grid_size) < (density / 100))
-    combined_mask = within_circle & fill_mask
-
-    # Randomly choose B or D for those cells
-    bd_rand = cp.random.rand(grid_size, grid_size)
-    type_b_or_d = cp.where(bd_rand < 0.5, TYPE_B, TYPE_D)
-    point_type = cp.where(combined_mask, type_b_or_d, point_type)
-
-    # 6) Place initial A/C points by replacing some of B/D cells
-    # Find coords of B or D
-    b_or_d_mask = (point_type == TYPE_B) | (point_type == TYPE_D)
-    valid_coords = cp.argwhere(b_or_d_mask)  # shape (#cells, 2)
-    if valid_coords.shape[0] == 0:
-        # Edge case: no cells at all
-        return [], [], point_type, output
-
-    n_barcodes = len(input_seqs)
-    chosen_indices = cp.random.choice(
-        valid_coords.shape[0],
-        size=n_barcodes,
-        replace=(valid_coords.shape[0] < n_barcodes)
-    )
-    chosen_positions = valid_coords[chosen_indices]  # shape (n_barcodes, 2)
-
-    chosen_i = chosen_positions[:, 0]
-    chosen_j = chosen_positions[:, 1]
-    old_types = point_type[chosen_i, chosen_j]
-    new_types = cp.where(old_types == TYPE_B, TYPE_A, TYPE_C)
-    point_type[chosen_i, chosen_j] = new_types
-    seq_id[chosen_i, chosen_j] = barcode_ids
-
-    # Active points (i,j,seq_id)
-    active_i = chosen_i
-    active_j = chosen_j
-    active_seq_ids = barcode_ids
-
-    # 7) Main simulation
-    effective_aoe = (aoe_radius / 100) * s_radius * res
-    cycle_counts = []
-    max_cycles = 1000
-
-    for cycle in range(max_cycles):
-        if active_i.size == 0:
+        # Two fail safe if statements:
+        # Termination: if no active a points remain, break.
+        if len(a_points_active) == 0:
             break
 
-        parent_ptypes = point_type[active_i, active_j]
-        # Partition parents into two groups: A or C
-        is_a_mask = (parent_ptypes == TYPE_A)
-        is_c_mask = (parent_ptypes == TYPE_C)
+        # If there are no available p points at all, then none of the remaining a points can connect.
+        #if len(p_points) == 0:
+        #    # All remaining a points are cleared.
+        #    for point in a_points_active:
+        #        seq = point['sequence']
+        #        cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
+        #    a_points_active = np.empty(0, dtype=a_points_active.dtype)
+        #    break
 
-        # We'll define a helper function that performs vectorized conversion attempts
-        def vector_convert_parents_to_targets(
-                parent_i: cp.ndarray,
-                parent_j: cp.ndarray,
-                parent_seq_ids: cp.ndarray,
-                parent_type_val: int,
-                target_type_val: int,
-                all_sequences: cp.ndarray
-        ) -> Tuple[cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray]:
-            """
-            For each parent in (parent_i, parent_j), attempt to convert exactly one
-            target cell of 'target_type_val' within the AOE. Returns:
-              (child_i, child_j, child_seq_ids, updated_all_sequences)
-            """
+        # --- Determine pending p points ---
+        # Build a KDTree on p_points.
+        p_tree = cKDTree(p_points)
+        # Get coordinates of active a points.
+        coords_a = np.column_stack((a_points_active['x'], a_points_active['y']))
+        # For each active a point, get indices of p_points within its aoe.
+        query_results = p_tree.query_ball_point(coords_a, r=aoe_radius)
 
-            if parent_i.size == 0:
-                return (cp.array([], dtype=cp.int32),
-                        cp.array([], dtype=cp.int32),
-                        cp.array([], dtype=cp.int32),
-                        all_sequences)
+        # Identify a_points that do NOT have any p point within their aoe.
+        no_pending_mask = np.array([len(indices) == 0 for indices in query_results])
+        if np.any(no_pending_mask):
+            # Remove these a points and add their sequences to cleared_sequences.
+            for point in a_points_active[no_pending_mask]:
+                seq = point['sequence']
+                cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
+            # Keep only those with at least one nearby p point.
+            a_points_active = a_points_active[~no_pending_mask]
+            # Also update coords_a and query_results accordingly.
+            coords_a = np.column_stack((a_points_active['x'], a_points_active['y']))
+            query_results = p_tree.query_ball_point(coords_a, r=aoe_radius)
 
-            # gather target coords
-            target_coords = cp.argwhere(point_type == target_type_val)
-            if target_coords.size == 0:
-                return (cp.array([], dtype=cp.int32),
-                        cp.array([], dtype=cp.int32),
-                        cp.array([], dtype=cp.int32),
-                        all_sequences)
+        # Create a boolean mask for p_points that are within any active a point's aoe.
+        pending_mask = np.zeros(len(p_points), dtype=bool)
+        for indices in query_results:
+            if indices:
+                pending_mask[indices] = True
+        # Extract pending points.
+        pending_p_points = p_points[pending_mask]
+        # Remove these from p_points.
+        p_points = p_points[~pending_mask]
+        print(f"{len(p_points)} left after removing pending points.")
 
-            ti = target_coords[:, 0]  # shape (Y,)
-            tj = target_coords[:, 1]
-            X = parent_i.size
-            Y = target_coords.shape[0]
+        # --- Connection attempts ---
+        next_active_a_points_list = []
+        while len(pending_p_points) > 0 and len(a_points_active) > 0:
+            # Build a KDTree for the current pending p points.
+            pending_tree = cKDTree(pending_p_points)
 
-            # Compute pairwise distance
-            pi_col = parent_i[:, None]  # shape (X,1)
-            pj_col = parent_j[:, None]
-            di = pi_col - ti[None, :]  # shape (X,Y)
-            dj = pj_col - tj[None, :]
-            dist_matrix = cp.sqrt(di * di + dj * dj)
+            # Record connection attempts:
+            connection_attempts = {}
+            for i, point in enumerate(a_points_active):
+                pt = [point['x'], point['y']]
+                candidate_indices = pending_tree.query_ball_point(pt, r=aoe_radius)
+                if candidate_indices:
+                    chosen = random.choice(candidate_indices)
+                    connection_attempts.setdefault(chosen, []).append(i)
+            # If no a point found any pending p point, break out.
+            if not connection_attempts:
+                break
 
-            in_range = dist_matrix <= effective_aoe
-            any_valid = cp.any(in_range, axis=1)  # shape (X,)
-            valid_targets_idx = cp.argmax(in_range, axis=1)  # picks first True for each row
-            valid_targets_idx = cp.where(any_valid, valid_targets_idx, -1)
+            # Collision resolution and success check.
+            successful_connections = []  # list of tuples: (a_point_index, pending_index)
+            for pending_idx, a_indices in connection_attempts.items():
+                chosen_a_index = random.choice(a_indices)
+                if random.random() < success_prob:
+                    successful_connections.append((chosen_a_index, pending_idx))
 
-            parent_indices = cp.argwhere(valid_targets_idx != -1).ravel()
-            if parent_indices.size == 0:
-                return (cp.array([], dtype=cp.int32),
-                        cp.array([], dtype=cp.int32),
-                        cp.array([], dtype=cp.int32),
-                        all_sequences)
+            if not successful_connections:
+                break
 
-            chosen_targets = valid_targets_idx[parent_indices]
-            child_i = ti[chosen_targets]
-            child_j = tj[chosen_targets]
-            child_parents_seq = parent_seq_ids[parent_indices]
+            indices_to_remove = set()
+            pending_indices_to_remove = set()
+            for a_idx, pending_idx in successful_connections:
+                a_point = a_points_active[a_idx]
+                p_point = pending_p_points[pending_idx]
+                new_seq, mutated = process_mutation(a_point['sequence'], mutation_rate, mutation_probabilities)
+                # Create a new point with the p_point's coordinates.
+                new_point = {"x": p_point[0], "y": p_point[1], "sequence": new_seq, "N0": 1}
+                next_active_a_points_list.append(a_point)
+                next_active_a_points_list.append(new_point)
+                indices_to_remove.add(a_idx)
+                pending_indices_to_remove.add(pending_idx)
 
-            # success probability with deviation
-            random_dev = cp.random.uniform(-deviation, deviation, size=child_i.shape)
-            eff_success_probs = cp.clip(success_prob * (1 + random_dev), 0, 1)
-            success_draws = cp.random.rand(child_i.size)
-            success_mask = success_draws < eff_success_probs
+            # Remove the successful a points from a_points_active.
+            if indices_to_remove:
+                mask = np.ones(len(a_points_active), dtype=bool)
+                mask[list(indices_to_remove)] = False
+                a_points_active = a_points_active[mask]
 
-            child_i = child_i[success_mask]
-            child_j = child_j[success_mask]
-            child_parents_seq = child_parents_seq[success_mask]
+            # Remove used pending p points.
+            if len(pending_indices_to_remove) > 0:
+                mask_pending = np.ones(len(pending_p_points), dtype=bool)
+                mask_pending[list(pending_indices_to_remove)] = False
+                pending_p_points = pending_p_points[mask_pending]
 
-            if child_i.size == 0:
-                return (child_i, child_j, child_parents_seq, all_sequences)
+            # (Remaining a_points_active will try again if there are still pending p points.)
 
-            # batch mutation
-            updated_all_sequences, new_child_seq_ids = batch_mutate_sequences(
-                child_parents_seq,
-                all_sequences,
-                mutation_rate,
-                mutation_probabilities
-            )
+        # *** Merge leftover pending points back into the main pool ***
+        # Any pending p_points that were not used are returned to p_points.
+        p_points = np.concatenate((p_points, pending_p_points))
+        print(f"After merging, p_points has {len(p_points)} points.")
 
-            # Mark them in the grid
-            point_type[child_i, child_j] = parent_type_val
-            seq_id[child_i, child_j] = new_child_seq_ids
+        # End of connection attempts for this cycle.
+        if next_active_a_points_list:
+            a_points_active = generate_new_a_points(next_active_a_points_list)
+        else:
+            a_points_active = np.empty(0, dtype=a_points_active.dtype)
 
-            return (child_i, child_j, new_child_seq_ids, updated_all_sequences)
+    # End simulation cycles.
+    print("Simulation ended.")
 
-        # Convert A -> B
-        a_i = active_i[is_a_mask]
-        a_j = active_j[is_a_mask]
-        a_seq = active_seq_ids[is_a_mask]
-        child_a_i, child_a_j, child_a_seq_ids, all_sequences = vector_convert_parents_to_targets(
-            a_i, a_j, a_seq,
-            TYPE_A,  # parent's type
-            TYPE_B,  # target type to convert
-            all_sequences
-        )
+    # Write final output CSV file.
+    # Collapse duplicate sequences by summing N0 counts.
+    with open(output, 'w', newline='') as csvfile:
+        fieldnames = ['sequence', 'N0']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for seq, count in cleared_sequences.items():
+            writer.writerow({'sequence': seq, 'N0': count})
+    print(f"Final output CSV written to {output}")
+    sequences_polony_amp = []
+    for encoded_seq, n0 in cleared_sequences.items():
+        decoded = decode(encoded_seq)
+        dictionary = {'sequence': decoded, 'N0': n0}
+        sequences_polony_amp.append(dictionary)
+    bridge_output = output
 
-        # Convert C -> D
-        c_i = active_i[is_c_mask]
-        c_j = active_j[is_c_mask]
-        c_seq = active_seq_ids[is_c_mask]
-        child_c_i, child_c_j, child_c_seq_ids, all_sequences = vector_convert_parents_to_targets(
-            c_i, c_j, c_seq,
-            TYPE_C,
-            TYPE_D,
-            all_sequences
-        )
+    return sequences_polony_amp, bridge_output
 
-        # Combine new children
-        new_i = cp.concatenate([child_a_i, child_c_i])
-        new_j = cp.concatenate([child_a_j, child_c_j])
-        new_seq = cp.concatenate([child_a_seq_ids, child_c_seq_ids])
 
-        total_active = active_i.size + new_i.size
-        cycle_counts.append(int(total_active))
-
-        if new_i.size == 0:
-            break
-
-        # Update active
-        active_i = cp.concatenate([active_i, new_i])
-        active_j = cp.concatenate([active_j, new_j])
-        active_seq_ids = cp.concatenate([active_seq_ids, new_seq])
-
-    # 8) Merge duplicates from A/C cells
-    is_ac_mask = (point_type == TYPE_A) | (point_type == TYPE_C)
-    ac_coords = cp.argwhere(is_ac_mask)
-    ac_seq_ids = seq_id[ac_coords[:, 0], ac_coords[:, 1]]
-    if ac_seq_ids.size == 0:
-        return [], [0], point_type, output
-
-    uniq_ids, counts = cp.unique(ac_seq_ids, return_counts=True)
-    uniq_ids_host = uniq_ids.get()
-    counts_host = counts.get()
-
-    merged_list = []
-    for uid, cnt in zip(uniq_ids_host, counts_host):
-        if uid < 0 or uid >= all_sequences.shape[0]:
-            continue
-        seq_array = all_sequences[uid]  # shape (max_len,)
-        # For demonstration, we won't handle trailing padding
-        seq_str = decode_sequence(seq_array)
-        merged_list.append({"sequence": seq_str, "N0": int(cnt)})
-
-    polonies_output = f"results/polonies_{output}"
-    cycle_counts_host = [int(x) for x in cycle_counts]
-
-    return merged_list, cycle_counts_host, point_type, polonies_output

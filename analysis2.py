@@ -186,20 +186,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-NA = 0
-B= 1
-D = 2
-A = 3
-C = 4
-
-fooling_around = array([[NA, NA, B, NA, NA],
-                        [NA, B, D, B, NA],
-                        [B, D, A, C, B],
-                        [NA, B, B, D, NA],
-                        [NA, NA, D, NA, NA]],
-                       [[NA, NA, '',NA, NA],
-                        [NA, '', '', '', NA],
-                        ['', '', 'AGCT', 'TCGA', ''],
-                        [NA, '', '', '', NA],
-                        [NA, NA, '', NA, NA]])
