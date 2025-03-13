@@ -1,20 +1,21 @@
 import logging
-from support import compute_global_p, process_mutation, batch_mutate_sequences, decode, encode
+from support import compute_global_p, process_mutation, decode, encode
 import os
-import cupy as cp
-import math, random
+import math
+import random
 from typing import List, Dict, Tuple, Any
 import numpy as np
 import csv
 from scipy.spatial import cKDTree
-from support import process_mutation
 import shutil
-
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 
 random.seed(42)
 
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
+
 
 def pcr_amplification(sequences: List[Dict[str, Any]],
                       cycles: int,
@@ -70,6 +71,121 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
     base, ext = os.path.splitext(output)
     pcr_output = f"results/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output
+
+
+def animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_prob):
+    """
+    Illustrative animation for simulation.
+
+    - s_radius: Radius of the simulation circle.
+    - density: Number of P points per unit area.
+    - true_barcodes: List (or similar) of sequences representing initial A points.
+    - aoe_radius: The area-of-effect radius for each A point.
+    - success_prob: Probability that a connection attempt succeeds.
+
+    The animation shows two frames per cycle:
+      Frame 1: A points (red) and P points (blue) with AOE circles (green dashed).
+      Frame 2: After connection attempts, P points that are connected are converted to A points.
+    """
+    # --- Generate initial A points from true_barcodes ---
+    num_a = len(true_barcodes)
+    # uniformly sample A points within a circle of radius s_radius
+    a_r = s_radius * np.sqrt(np.random.rand(num_a))
+    a_theta = 2 * np.pi * np.random.rand(num_a)
+    a_x = a_r * np.cos(a_theta)
+    a_y = a_r * np.sin(a_theta)
+    # A points as an array of shape (num_a,2)
+    a_points = np.column_stack((a_x, a_y))
+
+    # --- Generate P points ---
+    total_area = np.pi * s_radius ** 2
+    num_p = int(density * total_area)
+    p_r = s_radius * np.sqrt(np.random.rand(num_p))
+    p_theta = 2 * np.pi * np.random.rand(num_p)
+    p_x = p_r * np.cos(p_theta)
+    p_y = p_r * np.sin(p_theta)
+    p_points = np.column_stack((p_x, p_y))
+
+    # Set up the plot
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(-s_radius - 1, s_radius + 1)
+    ax.set_ylim(-s_radius - 1, s_radius + 1)
+    ax.set_aspect('equal')
+
+    cycle = 0
+    max_cycles = 5  # for illustration; in a real simulation you might continue until a condition is met.
+
+    while cycle < max_cycles:
+        cycle += 1
+        # ---------------------------
+        # Frame 1: Show current state
+        # ---------------------------
+        ax.clear()
+        ax.set_xlim(-s_radius - 1, s_radius + 1)
+        ax.set_ylim(-s_radius - 1, s_radius + 1)
+        ax.set_title(f"Cycle {cycle} - Frame 1: AOE Display")
+        # Plot A points (red) and P points (blue)
+        if len(a_points) > 0:
+            ax.scatter(a_points[:, 0], a_points[:, 1], color='red', label="A points")
+        if len(p_points) > 0:
+            ax.scatter(p_points[:, 0], p_points[:, 1], color='blue', label="P points")
+        # Plot AOE circles around each A point (green dashed)
+        for pt in a_points:
+            circ = Circle((pt[0], pt[1]), aoe_radius, color='green', fill=False, linestyle='dashed')
+            ax.add_patch(circ)
+        ax.legend()
+        plt.draw()
+        plt.pause(1)  # pause to show frame 1
+
+        # ---------------------------
+        # Frame 2: Simulate connection attempts.
+        # For each P point, if it is within the AOE of any A point,
+        # randomly pick one of those A points and attempt connection.
+        # On success (per success_prob) the P point transforms into an A point.
+        # ---------------------------
+        new_a_points = []
+        remaining_p_points = []
+        for pt in p_points:
+            # Find all A points within aoe_radius of pt.
+            distances = np.linalg.norm(a_points - pt, axis=1)
+            in_aoe = np.where(distances <= aoe_radius)[0]
+            if in_aoe.size > 0:
+                # There are candidate A points; pick one at random.
+                candidate_index = random.choice(in_aoe.tolist())
+                # Attempt connection.
+                if random.random() < success_prob:
+                    # Connection successful: transform this P point to an A point.
+                    new_a_points.append(pt)
+                    continue  # do not include pt in remaining p_points.
+            # If no candidate or connection failed, retain the P point.
+            remaining_p_points.append(pt)
+
+        # Update pools: add successful P-to-A conversions to the A points pool.
+        if new_a_points:
+            new_a_points = np.array(new_a_points)
+            a_points = np.concatenate((a_points, new_a_points), axis=0)
+        p_points = np.array(remaining_p_points) if remaining_p_points else np.empty((0, 2))
+
+        # Now display Frame 2.
+        ax.clear()
+        ax.set_xlim(-s_radius - 1, s_radius + 1)
+        ax.set_ylim(-s_radius - 1, s_radius + 1)
+        ax.set_title(f"Cycle {cycle} - Frame 2: After Connections")
+        if len(a_points) > 0:
+            ax.scatter(a_points[:, 0], a_points[:, 1], color='red', label="A points")
+        if len(p_points) > 0:
+            ax.scatter(p_points[:, 0], p_points[:, 1], color='blue', label="P points")
+        ax.legend()
+        plt.draw()
+        plt.pause(1)
+
+        # Optionally, you might decide to break if no more P points remain.
+        if len(p_points) == 0:
+            break
+
+    plt.ioff()
+    plt.show()
 
 
 def generate_points(s_radius: float, density: float) -> np.ndarray:
@@ -128,16 +244,58 @@ def generate_new_a_points(new_a_points_list: list) -> np.ndarray:
     return new_a_points_array
 
 
+def save_a_points_to_file(folder_path: str, cycle_num: int, cleared_sequences: dict):
+    # make sure the folder exists, if not, create it
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Define the CSV file path with cycle number
+    csv_file_path = os.path.join(folder_path, f'cleared_sequences{cycle_num}.csv')
+
+    # Write the dictionary to a CSV file
+    with open(csv_file_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+
+        # Write the header
+        writer.writerow(['sequence', 'N0'])
+
+        # Write the data (sequence, N0)
+        for seq, N0 in cleared_sequences.items():
+            writer.writerow([seq, N0])
+
+
+def conjugate_files(folder_path: str):
+    # Create a list to hold the rows from all CSV files
+    all_rows = []
+    # Iterate over all files in the folder
+    for filename in os.listdir(folder_path):
+        # Check if the file is a CSV file
+        if filename.endswith('.csv'):
+            file_path = os.path.join(folder_path, filename)
+
+            # Open the CSV file and read its content
+            with open(file_path, mode='r', newline='') as file:
+                reader = csv.reader(file)
+                # Skip the header if it's not the first file
+                if all_rows:
+                    next(reader)  # Skip header row
+                # Add all rows from this file to the all_rows list
+                all_rows.extend(reader)
+
+            # Delete the original CSV file
+            os.remove(file_path)
+    return all_rows
+
+
 def polonies_amplification(s_radius: float,
-                            density: float,
-                            sequences: list,
-                            aoe_radius: float,
-                            success_prob: float,
-                            deviation: float,
-                            simulate: bool,
-                            mutation_rate: float,
-                            mutation_probabilities: Dict[str,float],
-                            output: str = "final_output.csv"):
+                           density: float,
+                           sequences: list,
+                           aoe_radius: float,
+                           success_prob: float,
+                           deviation: float,
+                           simulate: bool,
+                           mutation_rate: float,
+                           mutation_probabilities: Dict[str, float],
+                           output: str = "final_output.csv"):
     """
     Runs the simulation.
 
@@ -148,7 +306,7 @@ def polonies_amplification(s_radius: float,
     - In each cycle, all p_points that lie within any a point's aoe are removed from p_points and
       assigned to pending_p_points. Then every active a point tries to pick one p point (from pending)
       that lies within its own aoe – if successful (according to success_prob) then that connection
-      is accepted (collisions resolved randomly), processed via process_mutation, and the a point is
+      is accepted (collisions resolved randomly), processed via process_mutation, and the "a" point is
       moved to the next cycle. Active a points that at the beginning of a cycle have no p point
       in their aoe are removed (their sequence is saved for CSV output).
     - The simulation repeats cycles until no active a points remain.
@@ -156,8 +314,8 @@ def polonies_amplification(s_radius: float,
       collapsed with N0 counts summed.
     """
     # Generate initial points.
-    p_points = generate_points(s_radius, density) # np.array
-    a_points_active = generate_a_points(sequences, s_radius) # np.array
+    p_points = generate_points(s_radius, density)  # np.array
+    a_points_active = generate_a_points(sequences, s_radius)  # np.array
 
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
     cleared_sequences = {}  # key: sequence, value: cumulative N0
@@ -173,7 +331,7 @@ def polonies_amplification(s_radius: float,
         cycle_num += 1
         print(f"Cycle {cycle_num}: {len(a_points_active)} active a points, {len(p_points)} remaining p points")
 
-        # Two fail safe if statements:
+        # Two fail-safe if statements:
         # Termination: if no active a points remain, break.
         if len(a_points_active) == 0:
             break
@@ -194,24 +352,8 @@ def polonies_amplification(s_radius: float,
                 seq = point['sequence']
                 cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
 
-
-            # SWITCH IT TO SUPPORTING METHOD
-            # make sure the folder exists, if not, create it
-            os.makedirs(folder_path, exist_ok=True)
-
-            # Define the CSV file path with cycle number
-            csv_file_path = os.path.join(folder_path, f'cleared_sequences{cycle_num}.csv')
-
-            # Write the dictionary to a CSV file
-            with open(csv_file_path, mode='w', newline='') as file:
-                writer = csv.writer(file)
-
-                # Write the header
-                writer.writerow(['sequence', 'N0'])
-
-                # Write the data (sequence, N0)
-                for seq, N0 in cleared_sequences.items():
-                    writer.writerow([seq, N0])
+            # save inactive a points to cycle specific csv file
+            save_a_points_to_file(folder_path, cycle_num, cleared_sequences)
 
             # Keep only those with at least one nearby p point.
             a_points_active = a_points_active[~no_pending_mask]
@@ -295,27 +437,12 @@ def polonies_amplification(s_radius: float,
             a_points_active = generate_new_a_points(next_active_a_points_list)
         else:
             a_points_active = np.empty(0, dtype=a_points_active.dtype)
+        if cycle_num == 1:
+            true_barcodes = "true_barcodes.csv"
+            animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_prob)
 
-    # Create a list to hold the rows from all CSV files
-    all_rows = []
-
-    # Iterate over all files in the folder
-    for filename in os.listdir(folder_path):
-        # Check if the file is a CSV file
-        if filename.endswith('.csv'):
-            file_path = os.path.join(folder_path, filename)
-
-            # Open the CSV file and read its content
-            with open(file_path, mode='r', newline='') as file:
-                reader = csv.reader(file)
-                # Skip the header if it's not the first file
-                if all_rows:
-                    next(reader)  # Skip header row
-                # Add all rows from this file to the all_rows list
-                all_rows.extend(reader)
-
-            # Delete the original CSV file
-            os.remove(file_path)
+    # conjugation of files from each cycle
+    all_rows = conjugate_files(folder_path)
 
     # Write the combined rows into the final 'cleared_sequences.csv' file
     with open(output_file_path, mode='w', newline='') as file:
@@ -362,5 +489,3 @@ def polonies_amplification(s_radius: float,
     bridge_output = output
 
     return sequences_polony_amp, bridge_output
-
-
