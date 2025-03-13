@@ -6,6 +6,7 @@ import random
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+
 def read_csv_file(filepath, sample_size, min_rows):
     """
     Read a CSV file and return a list of dictionaries such that:
@@ -191,8 +192,8 @@ def main():
     parser.add_argument("--metric", type=str, choices=["hamming", "levenshtein", "both"],
                         default="hamming",
                         help="Distance metric to use: 'hamming' (requires equal length), 'levenshtein', or 'both'.")
-    parser.add_argument("--sample_size", type=int, default=1000, help="Sample size for analysis")
-    parser.add_argument("--minrows", type=int, default=100, help="Minimum number of rows to sample")
+    parser.add_argument("--sample_size", type=int, default=100, help="Sample size for analysis")
+    parser.add_argument("--minrows", type=int, default=20, help="Minimum number of rows to sample")
     args = parser.parse_args()
 
     # List to store tuples of (file number, N0 values)

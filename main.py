@@ -3,7 +3,7 @@ import csv
 import logging
 import matplotlib.pyplot as plt
 import math
-from amplifying import pcr_amplification, bridge_amplification, polonies_amplification
+from amplifying import pcr_amplification, polonies_amplification
 from generate import generate_sequences
 import os
 
@@ -110,29 +110,29 @@ def main():
                     writer.writerow(seq)
             logging.info(f"PCR amplification complete. Results saved to {pcr_output}.")
 
-        if args.method in ['bridge', 'both_12']:
-            sequences_bridge = [dict(seq) for seq in sequences]
-            logging.info("Starting Bridge amplification...")
-            sequences_bridge_amp, history_bridge, grid, bridge_output = bridge_amplification(
-                sequences_bridge,
-                mutation_rate=args.mutation_rate,
-                mutation_probabilities=mutation_probabilities,
-                simulate=args.simulate,
-                s_radius=args.S_radius,
-                aoe_radius=args.AOE_radius,
-                density=args.density,
-                success_prob=args.success_prob,
-                deviation=args.deviation,
-                output=args.output,
-            )
-            with open(bridge_output, 'w', newline='') as csvfile:
-                fieldnames = ['sequence', 'N0']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                for seq_dict in sequences_bridge_amp:
-                    writer.writerow(seq_dict)
-
-            logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
+        #if args.method in ['bridge', 'both_12']:
+        #    sequences_bridge = [dict(seq) for seq in sequences]
+        #    logging.info("Starting Bridge amplification...")
+        #    sequences_bridge_amp, history_bridge, grid, bridge_output = bridge_amplification(
+        #        sequences_bridge,
+        #        mutation_rate=args.mutation_rate,
+        #        mutation_probabilities=mutation_probabilities,
+        #        simulate=args.simulate,
+       #        s_radius=args.S_radius,
+        #        aoe_radius=args.AOE_radius,
+        #        density=args.density,
+        #        success_prob=args.success_prob,
+        #        deviation=args.deviation,
+        #        output=args.output,
+        #    )
+        #    with open(bridge_output, 'w', newline='') as csvfile:
+        #        fieldnames = ['sequence', 'N0']
+        #        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        #        writer.writeheader()
+        #        for seq_dict in sequences_bridge_amp:
+        #            writer.writerow(seq_dict)
+#
+        #    logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
 
         if args.method in ['polonies_amplification', 'both_13']:
             sequences_bridge = [dict(seq) for seq in sequences]

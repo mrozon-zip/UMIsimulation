@@ -59,13 +59,13 @@ for s_radius in [10, 20, 30]:
                         "--deviation", str(deviation),
                         "--no_simulate",
                         "--no_plot",
-                        "--output", f"mut_{mutation_rate}_Sr_{s_radius}_dens_{density}_SP_{success_prob}_dev_{deviation}.csv"
+                        "--output", f"results1/mut_{mutation_rate}_Sr_{s_radius}_dens_{density}_SP_{success_prob}_dev_{deviation}.csv"
                     ]
                     commands.append(cmd)
 
 # Run all commands in parallel using a ThreadPoolExecutor.
 # (Choose max_workers based on your system's capacity; here we use 8 as an example.)
-max_workers = 12
+max_workers = 1
 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
     futures = {executor.submit(run_command, cmd): cmd for cmd in commands}
     for future in concurrent.futures.as_completed(futures):

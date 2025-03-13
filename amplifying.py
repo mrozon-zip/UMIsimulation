@@ -114,7 +114,7 @@ def animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_pro
     ax.set_aspect('equal')
 
     cycle = 0
-    max_cycles = 5  # for illustration; in a real simulation you might continue until a condition is met.
+    max_cycles = 10  # for illustration; in a real simulation you might continue until a condition is met.
 
     while cycle < max_cycles:
         cycle += 1
@@ -127,55 +127,67 @@ def animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_pro
         ax.set_title(f"Cycle {cycle} - Frame 1: AOE Display")
         # Plot A points (red) and P points (blue)
         if len(a_points) > 0:
-            ax.scatter(a_points[:, 0], a_points[:, 1], color='red', label="A points")
+            ax.scatter(a_points[:, 0], a_points[:, 1], color='red', label="A points", s=0.4)
         if len(p_points) > 0:
-            ax.scatter(p_points[:, 0], p_points[:, 1], color='blue', label="P points")
+            ax.scatter(p_points[:, 0], p_points[:, 1], color='blue', label="P points", s=0.2)
         # Plot AOE circles around each A point (green dashed)
         for pt in a_points:
-            circ = Circle((pt[0], pt[1]), aoe_radius, color='green', fill=False, linestyle='dashed')
+            circ = Circle((pt[0], pt[1]), aoe_radius, color='green', fill=False, linestyle='dashed', alpha=0.3)
             ax.add_patch(circ)
         ax.legend()
         plt.draw()
-        plt.pause(1)  # pause to show frame 1
+        plt.pause(2)  # pause to show frame 1
 
         # ---------------------------
-        # Frame 2: Simulate connection attempts.
-        # For each P point, if it is within the AOE of any A point,
-        # randomly pick one of those A points and attempt connection.
-        # On success (per success_prob) the P point transforms into an A point.
+        # Frame 2: Simulate one connection attempt per cycle.
         # ---------------------------
-        new_a_points = []
-        remaining_p_points = []
-        for pt in p_points:
-            # Find all A points within aoe_radius of pt.
+        # Identify candidate P points that are within the AOE of any A point.
+        candidate_indices = []
+        for i, pt in enumerate(p_points):
             distances = np.linalg.norm(a_points - pt, axis=1)
             in_aoe = np.where(distances <= aoe_radius)[0]
             if in_aoe.size > 0:
-                # There are candidate A points; pick one at random.
-                candidate_index = random.choice(in_aoe.tolist())
-                # Attempt connection.
-                if random.random() < success_prob:
-                    # Connection successful: transform this P point to an A point.
-                    new_a_points.append(pt)
-                    continue  # do not include pt in remaining p_points.
-            # If no candidate or connection failed, retain the P point.
-            remaining_p_points.append(pt)
+                candidate_indices.append(i)
 
-        # Update pools: add successful P-to-A conversions to the A points pool.
+        # Prepare lists for new A points and for remaining P points.
+        new_a_points = []
+        # We'll start by assuming all P points remain unless one is converted.
+        remaining_p_points = p_points.copy()
+
+        if candidate_indices:
+            # Randomly choose one candidate P point from among those candidates.
+            chosen_idx = random.choice(candidate_indices)
+            chosen_pt = p_points[chosen_idx]
+
+            # For the chosen P point, find which A points are within its AOE.
+            distances = np.linalg.norm(a_points - chosen_pt, axis=1)
+            in_aoe = np.where(distances <= aoe_radius)[0]
+
+            # If there are any A points in range, randomly pick one (this resolves collision).
+            if in_aoe.size > 0:
+                candidate_a_idx = random.choice(in_aoe.tolist())
+                # Attempt connection with success probability.
+                if random.random() < success_prob:
+                    # Connection successful: convert the chosen P point into an A point.
+                    new_a_points.append(chosen_pt)
+                    # Remove this P point from the pool.
+                    remaining_p_points = np.delete(p_points, chosen_idx, axis=0)
+
+        # Update pools: add the newly converted A point (if any) to the A points pool.
         if new_a_points:
             new_a_points = np.array(new_a_points)
             a_points = np.concatenate((a_points, new_a_points), axis=0)
-        p_points = np.array(remaining_p_points) if remaining_p_points else np.empty((0, 2))
+        p_points = remaining_p_points
 
         # Now display Frame 2.
         ax.clear()
         ax.set_xlim(-s_radius - 1, s_radius + 1)
         ax.set_ylim(-s_radius - 1, s_radius + 1)
-        ax.set_title(f"Cycle {cycle} - Frame 2: After Connections")
+        ax.set_title(f"Cycle {cycle} - Frame 2: After One Connection")
         if len(a_points) > 0:
-            ax.scatter(a_points[:, 0], a_points[:, 1], color='red', label="A points")
+            ax.scatter(a_points[:, 0], a_points[:, 1], color='red', label="A points", s=0.4)
         if len(p_points) > 0:
-            ax.scatter(p_points[:, 0], p_points[:, 1], color='blue', label="P points")
+            ax.scatter(p_points[:, 0], p_points[:, 1], color='blue', label="P points", s=0.2)
         ax.legend()
         plt.draw()
         plt.pause(1)
@@ -241,6 +253,8 @@ def generate_new_a_points(new_a_points_list: list) -> np.ndarray:
     for i, seq_dict in enumerate(new_a_points_list):
         new_a_points_array['sequence'][i] = seq_dict["sequence"]
         new_a_points_array['N0'][i] = seq_dict["N0"]
+        new_a_points_array['x'][i] = seq_dict['x']
+        new_a_points_array['y'][i] = seq_dict['y']
     return new_a_points_array
 
 
@@ -322,7 +336,7 @@ def polonies_amplification(s_radius: float,
 
     # Define the folder where the supporting files will be saved
     folder_path = 'supporting_folder'
-
+    aoe_radius = s_radius * aoe_radius/100
     # Define the output file for concatenated results
     output_file_path = 'cleared_sequences.csv'
 
@@ -419,6 +433,7 @@ def polonies_amplification(s_radius: float,
                 mask[list(indices_to_remove)] = False
                 a_points_active = a_points_active[mask]
 
+
             # Remove used pending p points.
             if len(pending_indices_to_remove) > 0:
                 mask_pending = np.ones(len(pending_p_points), dtype=bool)
@@ -437,7 +452,7 @@ def polonies_amplification(s_radius: float,
             a_points_active = generate_new_a_points(next_active_a_points_list)
         else:
             a_points_active = np.empty(0, dtype=a_points_active.dtype)
-        if cycle_num == 1:
+        if cycle_num == 1 and simulate:
             true_barcodes = "true_barcodes.csv"
             animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_prob)
 
