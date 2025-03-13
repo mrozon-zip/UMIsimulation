@@ -3,11 +3,9 @@ import csv
 import logging
 import matplotlib.pyplot as plt
 import math
-from denoise import Denoiser
 from amplifying import pcr_amplification, bridge_amplification, polonies_amplification
 from generate import generate_sequences
 import os
-import numpy as np
 
 os.makedirs("results", exist_ok=True)
 

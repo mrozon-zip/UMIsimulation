@@ -7,6 +7,7 @@ import random
 
 random.seed(42)
 
+
 class Denoiser:
     def __init__(self, input_csv: str):
         self.input_csv = input_csv
