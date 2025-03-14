@@ -69,7 +69,7 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
             f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}"
         )
     base, ext = os.path.splitext(output)
-    pcr_output = f"results/pcr_{base}{ext}"
+    pcr_output = f"results1/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output
 
 
@@ -501,6 +501,7 @@ def polonies_amplification(s_radius: float,
         decoded_seq = decode(encoded_seq)
         sequences_polony_amp.append({"sequence": decoded_seq, "N0": total_n0})
 
-    bridge_output = output
+    base, ext = os.path.splitext(output)
+    polonies_output = f"results1/polonies_{base}{ext}"
 
-    return sequences_polony_amp, bridge_output
+    return sequences_polony_amp, polonies_output

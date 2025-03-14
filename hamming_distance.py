@@ -155,34 +155,72 @@ def create_distance_distribution_figure(distribution, base, metric, source_file)
     fig.tight_layout()
     return fig
 
+
 def extract_info_from_filename(filepath):
     """
     Extract information from the filename based on underscore-separated tokens.
-    Expected filename format (without extension):
-      segment1_segment2_value2_segment3_value3_segment4_value4_segment5_value5_segment6_value6
-    For example, for:
-      bridge_mut_0.01_Sr_5_dens_20_SP_0.85_dev_0.05.csv
-      -> amplification: bridge
-      -> mutation_rate: 0.01
-      -> s_radius: 5
-      -> density: 20
-      -> success_probability: 0.85
-      -> deviation: 0.05
+    The filename (without extension) is expected to have the following structure:
+      amplification_key1_value1_key2_value2_..._keyN_valueN
+
+    - The first segment (before the first underscore) is always treated as the "amplification" value.
+    - Every subsequent two tokens represent a key and its corresponding value.
+    - If a key matches one of the known shortcuts, it is renamed according to the mapping:
+         mut  -> mutation_rate
+         Sr   -> s_radius
+         dens -> density
+         SP   -> success_probability
+         dev  -> deviation
+      Otherwise, the key is used as is.
+
+    Examples:
+      For "bridge_mut_0.01_Sr_5_dens_20_SP_0.85_dev_0.05.csv" the result is:
+         {
+             "amplification": "bridge",
+             "mutation_rate": "0.01",
+             "s_radius": "5",
+             "density": "20",
+             "success_probability": "0.85",
+             "deviation": "0.05"
+         }
+
+      For a filename with only one pair after amplification, e.g. "bridge_mut_0.01.csv":
+         {
+             "amplification": "bridge",
+             "mutation_rate": "0.01"
+         }
     """
     base = os.path.basename(filepath)
     base_no_ext, _ = os.path.splitext(base)
     tokens = base_no_ext.split('_')
-    if len(tokens) < 11:
-        raise ValueError("Filename doesn't have enough segments to extract required information")
-    info = {
-        "amplification": tokens[0],
-        "mutation_rate": tokens[2],
-        "s_radius": tokens[4],
-        "density": tokens[6],
-        "success_probability": tokens[8],
-        "deviation": tokens[10]
+
+    if not tokens:
+        raise ValueError("Filename must contain at least one segment for amplification.")
+
+    # The first token is always the amplification value.
+    info = {"amplification": tokens[0]}
+
+    # Remaining tokens must come in pairs.
+    if (len(tokens) - 1) % 2 != 0:
+        raise ValueError("Filename segments after the first must be in key-value pairs.")
+
+    # Mapping for known segment shortcuts.
+    mapping = {
+        "mut": "mutation_rate",
+        "Sr": "s_radius",
+        "dens": "density",
+        "SP": "success_probability",
+        "dev": "deviation"
     }
+
+    # Process each key/value pair.
+    for i in range(1, len(tokens), 2):
+        key = tokens[i]
+        value = tokens[i+1]
+        new_key = mapping.get(key, key)
+        info[new_key] = value
+
     return info
+
 
 def main():
     parser = argparse.ArgumentParser(

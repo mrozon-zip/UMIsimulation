@@ -77,6 +77,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         else:
             print(f"Command {' '.join(cmd)} completed successfully.")
 
+
 # After all amplification commands are finished, run hamming_distance.py on the results.
 csv_files = glob.glob("results1/*.csv")
 hamming_cmd = ["python3", "hamming_distance.py"] + csv_files + ["--metric", "both"]
