@@ -328,136 +328,246 @@ def polonies_amplification(s_radius: float,
       collapsed with N0 counts summed.
     """
     # Generate initial points.
-    p_points = generate_points(s_radius, density)  # np.array
-    a_points_active = generate_a_points(sequences, s_radius)  # np.array
+    bd_points = generate_points(s_radius, density)  # np.array
+    ac_points = generate_a_points(sequences, s_radius)  # np.array
+
+    # Randomly permute indices
+    indices1 = np.random.permutation(len(ac_points))
+    indices2 = np.random.permutation(len(bd_points))
+
+    # Compute the split index. If the length is odd, one array will have one more element.
+    mid1 = len(ac_points) // 2
+    mid2 = len(bd_points) // 2
+
+    # Split the data using the permuted indices
+    a_points_active = ac_points[indices1[:mid1]]
+    c_points_active = ac_points[indices1[mid1:]]
+
+    b_points = bd_points[indices2[:mid2]]
+    d_points = bd_points[indices2[mid2:]]
 
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
     cleared_sequences = {}  # key: sequence, value: cumulative N0
+    folder_name = "results1/helping_folder"
 
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
     # Define the folder where the supporting files will be saved
-    folder_path = 'supporting_folder'
+    base, ext = os.path.splitext(output)
+    folder_path_a = f"results1/helping_folder/a_supporting_{base}"
+    folder_path_c = f"results1/helping_folder/c_supporting_{base}"
     aoe_radius = s_radius * aoe_radius/100
     # Define the output file for concatenated results
-    output_file_path = 'cleared_sequences.csv'
+    output_file_path = f"results1/helping_folder/cleared_sequences_{base}.csv"
 
     cycle_num = 0
     while True:
         cycle_num += 1
-        print(f"Cycle {cycle_num}: {len(a_points_active)} active a points, {len(p_points)} remaining p points")
+        print(f"Cycle {cycle_num}: {len(a_points_active)} active a points, {len(b_points)} remaining b points")
+        print(f"Cycle {cycle_num}: {len(c_points_active)} active a points, {len(d_points)} remaining d points")
 
         # Two fail-safe if statements:
         # Termination: if no active a points remain, break.
-        if len(a_points_active) == 0:
+        if len(a_points_active) == 0 or len(c_points_active) == 0:
             break
 
         # --- Determine pending p points ---
         # Build a KDTree on p_points.
-        p_tree = cKDTree(p_points)
+        b_tree = cKDTree(b_points)
+        d_tree = cKDTree(d_points)
         # Get coordinates of active a points.
         coords_a = np.column_stack((a_points_active['x'], a_points_active['y']))
+        coords_c = np.column_stack((c_points_active['x'], c_points_active['y']))
         # For each active a point, get indices of p_points within its aoe.
-        query_results = p_tree.query_ball_point(coords_a, r=aoe_radius)
+        query_results_b = b_tree.query_ball_point(coords_a, r=aoe_radius)
+        query_results_d = d_tree.query_ball_point(coords_c, r=aoe_radius)
 
         # Identify a_points that do NOT have any p point within their aoe.
-        no_pending_mask = np.array([len(indices) == 0 for indices in query_results])
-        if np.any(no_pending_mask):
+        no_pending_mask_b = np.array([len(indices) == 0 for indices in query_results_b])
+        no_pending_mask_d = np.array([len(indices) == 0 for indices in query_results_d])
+
+        if np.any(no_pending_mask_b):
             # Remove these a points and add their sequences to cleared_sequences.
-            for point in a_points_active[no_pending_mask]:
+            for point in a_points_active[no_pending_mask_b]:
                 seq = point['sequence']
                 cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
 
             # save inactive a points to cycle specific csv file
-            save_a_points_to_file(folder_path, cycle_num, cleared_sequences)
+            save_a_points_to_file(folder_path_a, cycle_num, cleared_sequences)
 
             # Keep only those with at least one nearby p point.
-            a_points_active = a_points_active[~no_pending_mask]
+            a_points_active = a_points_active[~no_pending_mask_b]
             # Also update coords_a and query_results accordingly.
             coords_a = np.column_stack((a_points_active['x'], a_points_active['y']))
-            query_results = p_tree.query_ball_point(coords_a, r=aoe_radius)
+            query_results_b = b_tree.query_ball_point(coords_a, r=aoe_radius)
 
-        # Create a boolean mask for p_points that are within any active a point's aoe.
-        pending_mask = np.zeros(len(p_points), dtype=bool)
-        for indices in query_results:
+        if np.any(no_pending_mask_d):
+            # Remove these a points and add their sequences to cleared_sequences.
+            for point in c_points_active[no_pending_mask_d]:
+                seq = point['sequence']
+                cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
+
+            # save inactive a points to cycle specific csv file
+            save_a_points_to_file(folder_path_c, cycle_num, cleared_sequences)
+
+            # Keep only those with at least one nearby p point.
+            c_points_active = c_points_active[~no_pending_mask_d]
+            # Also update coords_a and query_results accordingly.
+            coords_c = np.column_stack((c_points_active['x'], c_points_active['y']))
+            query_results_d = d_tree.query_ball_point(coords_c, r=aoe_radius)
+
+        # Create a boolean mask for b_points that are within any active a point's aoe.
+        pending_mask_b = np.zeros(len(b_points), dtype=bool)
+        for indices in query_results_b:
             if indices:
-                pending_mask[indices] = True
+                pending_mask_b[indices] = True
         # Extract pending points.
-        pending_p_points = p_points[pending_mask]
+        pending_b_points = b_points[pending_mask_b]
+        # Remove these from b_points.
+        b_points = b_points[~pending_mask_b]
+        print(f"{len(b_points)} left after removing pending points.")
+
+        # Create a boolean mask for d_points that are within any active c point's aoe.
+        pending_mask_d = np.zeros(len(d_points), dtype=bool)
+        for indices in query_results_d:
+            if indices:
+                pending_mask_d[indices] = True
+        # Extract pending points.
+        pending_d_points = d_points[pending_mask_d]
         # Remove these from p_points.
-        p_points = p_points[~pending_mask]
-        print(f"{len(p_points)} left after removing pending points.")
+        d_points = d_points[~pending_mask_d]
+        print(f"{len(d_points)} left after removing pending points.")
 
         # --- Connection attempts ---
         next_active_a_points_list = []
-        while len(pending_p_points) > 0 and len(a_points_active) > 0:
-            # Build a KDTree for the current pending p points.
-            pending_tree = cKDTree(pending_p_points)
+        next_active_c_points_list = []
+        while (pending_b_points.size > 0 and
+               a_points_active.size > 0 and
+               pending_d_points.size > 0 and
+               c_points_active.size > 0):            # Build a KDTree for the current pending p points.
+            pending_tree_b = cKDTree(pending_b_points)
+            pending_tree_d = cKDTree(pending_d_points)
 
             # Record connection attempts:
-            connection_attempts = {}
+            connection_attempts_a = {}
             for i, point in enumerate(a_points_active):
                 pt = [point['x'], point['y']]
-                candidate_indices = pending_tree.query_ball_point(pt, r=aoe_radius)
+                candidate_indices = pending_tree_b.query_ball_point(pt, r=aoe_radius)
                 if candidate_indices:
                     chosen = random.choice(candidate_indices)
-                    connection_attempts.setdefault(chosen, []).append(i)
+                    connection_attempts_a.setdefault(chosen, []).append(i)
             # If no a point found any pending p point, break out.
-            if not connection_attempts:
+            if not connection_attempts_a:
+                break
+
+            # Record connection attempts:
+            connection_attempts_c = {}
+            for i, point in enumerate(c_points_active):
+                pt = [point['x'], point['y']]
+                candidate_indices = pending_tree_d.query_ball_point(pt, r=aoe_radius)
+                if candidate_indices:
+                    chosen = random.choice(candidate_indices)
+                    connection_attempts_c.setdefault(chosen, []).append(i)
+            # If no a point found any pending p point, break out.
+            if not connection_attempts_c:
                 break
 
             # Collision resolution and success check.
-            successful_connections = []  # list of tuples: (a_point_index, pending_index)
-            for pending_idx, a_indices in connection_attempts.items():
+            successful_connections_ab = []  # list of tuples: (a_point_index, pending_index)
+            for pending_idx, a_indices in connection_attempts_a.items():
                 chosen_a_index = random.choice(a_indices)
                 if random.random() < success_prob:
-                    successful_connections.append((chosen_a_index, pending_idx))
+                    successful_connections_ab.append((chosen_a_index, pending_idx))
 
-            if not successful_connections:
+            # Collision resolution and success check.
+            successful_connections_cd = []  # list of tuples: (a_point_index, pending_index)
+            for pending_idx, c_indices in connection_attempts_c.items():
+                chosen_a_index = random.choice(c_indices)
+                if random.random() < success_prob:
+                    successful_connections_cd.append((chosen_a_index, pending_idx))
+
+            if not successful_connections_cd and not successful_connections_ab:
                 break
 
-            indices_to_remove = set()
-            pending_indices_to_remove = set()
-            for a_idx, pending_idx in successful_connections:
+            indices_to_remove_a = set()
+            pending_indices_to_remove_b = set()
+            for a_idx, pending_idx in successful_connections_ab:
                 a_point = a_points_active[a_idx]
-                p_point = pending_p_points[pending_idx]
+                b_point = pending_b_points[pending_idx]
                 new_seq, mutated = process_mutation(a_point['sequence'], mutation_rate, mutation_probabilities)
                 # Create a new point with the p_point's coordinates.
-                new_point = {"x": p_point[0], "y": p_point[1], "sequence": new_seq, "N0": 1}
+                new_point = {"x": b_point[0], "y": b_point[1], "sequence": new_seq, "N0": 1}
                 next_active_a_points_list.append(a_point)
                 next_active_a_points_list.append(new_point)
-                indices_to_remove.add(a_idx)
-                pending_indices_to_remove.add(pending_idx)
+                indices_to_remove_a.add(a_idx)
+                pending_indices_to_remove_b.add(pending_idx)
+
+            indices_to_remove_c = set()
+            pending_indices_to_remove_d = set()
+            for c_idx, pending_idx in successful_connections_cd:
+                c_point = c_points_active[c_idx]
+                d_point = pending_d_points[pending_idx]
+                new_seq, mutated = process_mutation(c_point['sequence'], mutation_rate, mutation_probabilities)
+                # Create a new point with the p_point's coordinates.
+                new_point = {"x": d_point[0], "y": d_point[1], "sequence": new_seq, "N0": 1}
+                next_active_c_points_list.append(c_point)
+                next_active_c_points_list.append(new_point)
+                indices_to_remove_c.add(c_idx)
+                pending_indices_to_remove_d.add(pending_idx)
 
             # Remove the successful a points from a_points_active.
-            if indices_to_remove:
+            if indices_to_remove_a:
                 mask = np.ones(len(a_points_active), dtype=bool)
-                mask[list(indices_to_remove)] = False
+                mask[list(indices_to_remove_a)] = False
                 a_points_active = a_points_active[mask]
 
+            # Remove the successful c points from c_points_active.
+            if indices_to_remove_c:
+                mask = np.ones(len(c_points_active), dtype=bool)
+                mask[list(indices_to_remove_c)] = False
+                c_points_active = c_points_active[mask]
 
             # Remove used pending p points.
-            if len(pending_indices_to_remove) > 0:
-                mask_pending = np.ones(len(pending_p_points), dtype=bool)
-                mask_pending[list(pending_indices_to_remove)] = False
-                pending_p_points = pending_p_points[mask_pending]
+            if len(pending_indices_to_remove_b) > 0:
+                mask_pending = np.ones(len(pending_b_points), dtype=bool)
+                mask_pending[list(pending_indices_to_remove_b)] = False
+                pending_b_points = pending_b_points[mask_pending]
+
+            # Remove used pending p points.
+            if len(pending_indices_to_remove_d) > 0:
+                mask_pending = np.ones(len(pending_d_points), dtype=bool)
+                mask_pending[list(pending_indices_to_remove_d)] = False
+                pending_d_points = pending_d_points[mask_pending]
 
             # (Remaining a_points_active will try again if there are still pending p points.)
 
         # *** Merge leftover pending points back into the main pool ***
         # Any pending p_points that were not used are returned to p_points.
-        p_points = np.concatenate((p_points, pending_p_points))
-        print(f"After merging, p_points has {len(p_points)} points.")
+        b_points = np.concatenate((b_points, pending_b_points))
+        print(f"After merging, b_points has {len(b_points)} points.")
+
+        d_points = np.concatenate((d_points, pending_d_points))
+        print(f"After merging, d_points has {len(d_points)} points.")
 
         # End of connection attempts for this cycle.
         if next_active_a_points_list:
             a_points_active = generate_new_a_points(next_active_a_points_list)
         else:
             a_points_active = np.empty(0, dtype=a_points_active.dtype)
+
+        # End of connection attempts for this cycle.
+        if next_active_c_points_list:
+            c_points_active = generate_new_a_points(next_active_c_points_list)
+        else:
+            c_points_active = np.empty(0, dtype=c_points_active.dtype)
         if cycle_num == 1 and simulate:
             true_barcodes = "true_barcodes.csv"
             animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_prob)
 
     # conjugation of files from each cycle
-    all_rows = conjugate_files(folder_path)
+    rows_a = conjugate_files(folder_path_a)
+    rows_c = conjugate_files(folder_path_c)
+    all_rows = rows_a + rows_c
 
     # Write the combined rows into the final 'cleared_sequences.csv' file
     with open(output_file_path, mode='w', newline='') as file:
@@ -470,7 +580,8 @@ def polonies_amplification(s_radius: float,
         writer.writerows(all_rows)
 
     # Delete the folder after the files are combined and deleted
-    shutil.rmtree(folder_path)
+    shutil.rmtree(folder_path_a)
+    shutil.rmtree(folder_path_c)
 
     # End simulation cycles.
     print("Simulation ended.")
@@ -478,7 +589,7 @@ def polonies_amplification(s_radius: float,
     # Create a dictionary to collapse duplicates.
     dedup = {}
 
-    with open("cleared_sequences.csv", "r", newline="") as csvfile:
+    with open(output_file_path, "r", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             # Skip rows that are duplicate headers.
@@ -501,7 +612,6 @@ def polonies_amplification(s_radius: float,
         decoded_seq = decode(encoded_seq)
         sequences_polony_amp.append({"sequence": decoded_seq, "N0": total_n0})
 
-    base, ext = os.path.splitext(output)
     polonies_output = f"results1/polonies_{base}{ext}"
 
     return sequences_polony_amp, polonies_output

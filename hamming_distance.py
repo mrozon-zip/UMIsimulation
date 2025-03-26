@@ -54,7 +54,7 @@ def read_csv_file(filepath, sample_size, min_rows):
 
     # If conditions are not met after exhausting all rows, raise an error.
     if cumulative_n0 < sample_size or len(sampled_data) < min_rows:
-        raise ValueError("Insufficient data to meet the required cumulative N0 and minimum row count.")
+        print("WARNING! Insufficient data to meet the required cumulative N0 and minimum row count.")
 
     return sampled_data
 
@@ -231,7 +231,7 @@ def main():
                         default="hamming",
                         help="Distance metric to use: 'hamming' (requires equal length), 'levenshtein', or 'both'.")
     parser.add_argument("--sample_size", type=int, default=100, help="Sample size for analysis")
-    parser.add_argument("--minrows", type=int, default=20, help="Minimum number of rows to sample")
+    parser.add_argument("--minrows", type=int, default=0, help="Minimum number of rows to sample")
     args = parser.parse_args()
 
     # List to store tuples of (file number, N0 values)
@@ -253,15 +253,27 @@ def main():
             # Create an info page with the extracted information.
             fig_info = plt.figure(figsize=(8.5, 11))
             plt.axis('off')
-            info_text = (
-                f"Amplification type: {info['amplification']}\n"
-                f"Mutation rate: {info['mutation_rate']}\n"
-                f"S_radius: {info['s_radius']}\n"
-                f"Density: {info['density']}\n"
-                f"Success Probability: {info['success_probability']}\n"
-                f"Deviation: {info['deviation']}\n"
-                f"File number: {file_number}"
-            )
+            filename_base = os.path.basename(filepath).lower()
+            print(filename_base)
+            if filename_base.startswith("pcr"):
+                # For PCR files, show only amplification, mutation rate, and cycles.
+                info_text = (
+                    f"Amplification type: {info.get('amplification', 'N/A')}\n"
+                    f"Mutation rate: {info.get('mutation_rate', 'N/A')}\n"
+                    f"Cycles: {info.get('cycles', 'N/A')}\n"
+                    f"File number: {file_number}"
+                )
+            else:
+                # For polonies files, show all the extracted details.
+                info_text = (
+                    f"Amplification type: {info.get('amplification', 'N/A')}\n"
+                    f"Mutation rate: {info.get('mutation_rate', 'N/A')}\n"
+                    f"S_radius: {info.get('s_radius', 'N/A')}\n"
+                    f"Density: {info.get('density', 'N/A')}\n"
+                    f"Success Probability: {info.get('success_probability', 'N/A')}\n"
+                    f"Deviation: {info.get('deviation', 'N/A')}\n"
+                    f"File number: {file_number}"
+                )
             plt.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=14)
             pdf.savefig(fig_info)
             plt.close(fig_info)
