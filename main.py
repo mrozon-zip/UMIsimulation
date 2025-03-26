@@ -150,7 +150,7 @@ def main():
                 output=args.output,
             )
             with open(polonies_output, 'w', newline='') as csvfile:
-                fieldnames = ['sequence', 'N0']
+                fieldnames = ['sequence', 'N0', 'parent_id', 'mutation_cycle', 'active', 'id', 'born']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for seq_dict in sequences_polony_amp:

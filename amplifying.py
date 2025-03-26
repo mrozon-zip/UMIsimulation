@@ -221,7 +221,15 @@ def generate_a_points(sequences: list, s_radius: float) -> np.ndarray:
     carries the sequence and its N0 value.
     """
     # Define a structured dtype: x, y (floats), sequence (object), N0 (int)
-    dtype = np.dtype([('x', np.float64), ('y', np.float64), ('sequence', 'O'), ('N0', np.int64)])
+    dtype = np.dtype([('x', np.float64),
+                      ('y', np.float64),
+                      ('sequence', 'O'),
+                      ('N0', np.int64),
+                      ('id', np.int64),
+                      ('parent_id', np.int64),
+                      ('mutation_cycle', np.float64),
+                      ('born', np.int32),
+                      ('active', np.int32)])
     n = len(sequences)
     a_points = np.empty(n, dtype=dtype)
 
@@ -230,6 +238,12 @@ def generate_a_points(sequences: list, s_radius: float) -> np.ndarray:
     theta = 2 * np.pi * np.random.rand(n)
     a_points['x'] = r * np.cos(theta)
     a_points['y'] = r * np.sin(theta)
+
+    a_points['id'] = 0
+    a_points['parent_id'] = a_points['id']
+    a_points['mutation_cycle'] = 0
+    a_points['born'] = 0
+    a_points['active'] = 0
 
     # Assign sequence and N0 from input dictionaries.
     for i, seq_dict in enumerate(sequences):
@@ -245,7 +259,15 @@ def generate_new_a_points(new_a_points_list: list) -> np.ndarray:
     carries the sequence and its N0 value.
     """
     # Define a structured dtype: x, y (floats), sequence (object), N0 (int)
-    dtype = np.dtype([('x', np.float64), ('y', np.float64), ('sequence', 'O'), ('N0', np.int64)])
+    dtype = np.dtype([('x', np.float64),
+                      ('y', np.float64),
+                      ('sequence', 'O'),
+                      ('N0', np.int64),
+                      ('id', np.float64),
+                      ('parent_id', np.float64),
+                      ('mutation_cycle', np.float64),
+                      ('born', np.int32),
+                      ('active', np.int32)])
     n = len(new_a_points_list)
     new_a_points_array = np.empty(n, dtype=dtype)
 
@@ -255,6 +277,11 @@ def generate_new_a_points(new_a_points_list: list) -> np.ndarray:
         new_a_points_array['N0'][i] = seq_dict["N0"]
         new_a_points_array['x'][i] = seq_dict['x']
         new_a_points_array['y'][i] = seq_dict['y']
+        new_a_points_array['id'][i] = seq_dict['id']
+        new_a_points_array['parent_id'][i] = seq_dict['parent_id']
+        new_a_points_array['mutation_cycle'][i] = seq_dict['mutation_cycle']
+        new_a_points_array['born'][i] = seq_dict['born']
+        new_a_points_array['active'][i] = seq_dict['active']
     return new_a_points_array
 
 
@@ -270,11 +297,18 @@ def save_a_points_to_file(folder_path: str, cycle_num: int, cleared_sequences: d
         writer = csv.writer(file)
 
         # Write the header
-        writer.writerow(['sequence', 'N0'])
-
+        writer.writerow(['sequence', 'N0', 'id', 'parent_id', 'mutation_cycle', 'born', 'active'])
         # Write the data (sequence, N0)
-        for seq, N0 in cleared_sequences.items():
-            writer.writerow([seq, N0])
+        for seq, attributes in cleared_sequences.items():
+            writer.writerow([
+                seq,
+                attributes['N0'],
+                attributes.get('id', ''),
+                attributes.get('parent_id', ''),
+                attributes.get('mutation_cycle', ''),
+                attributes.get('born', ''),
+                attributes.get('active', '')
+            ])
 
 
 def conjugate_files(folder_path: str):
@@ -331,6 +365,12 @@ def polonies_amplification(s_radius: float,
     bd_points = generate_points(s_radius, density)  # np.array
     ac_points = generate_a_points(sequences, s_radius)  # np.array
 
+    # Create a pool of unique IDs.
+    # Total pool size is the sum of all initial points (a + b points).
+    total_possible_ids = len(ac_points) + len(bd_points)
+    available_ids = list(range(total_possible_ids))
+    random.shuffle(available_ids)  # Shuffle so that pop() returns a random id
+
     # Randomly permute indices
     indices1 = np.random.permutation(len(ac_points))
     indices2 = np.random.permutation(len(bd_points))
@@ -345,6 +385,12 @@ def polonies_amplification(s_radius: float,
 
     b_points = bd_points[indices2[:mid2]]
     d_points = bd_points[indices2[mid2:]]
+
+    # Assign unique IDs to initial a and c points and remove those ids from the pool.
+    for point in a_points_active:
+        point["id"] = available_ids.pop()
+    for point in c_points_active:
+        point["id"] = available_ids.pop()
 
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
     cleared_sequences = {}  # key: sequence, value: cumulative N0
@@ -390,7 +436,14 @@ def polonies_amplification(s_radius: float,
             # Remove these a points and add their sequences to cleared_sequences.
             for point in a_points_active[no_pending_mask_b]:
                 seq = point['sequence']
-                cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
+                cleared_sequences[seq] = {
+                    "N0": point['N0'],
+                    "id": point['id'],
+                    "parent_id": point['parent_id'],
+                    "mutation_cycle": point['mutation_cycle'],
+                    "born": point['born'],
+                    "active": point['active']
+                }
 
             # save inactive a points to cycle specific csv file
             save_a_points_to_file(folder_path_a, cycle_num, cleared_sequences)
@@ -405,7 +458,14 @@ def polonies_amplification(s_radius: float,
             # Remove these a points and add their sequences to cleared_sequences.
             for point in c_points_active[no_pending_mask_d]:
                 seq = point['sequence']
-                cleared_sequences[seq] = cleared_sequences.get(seq, 0) + point['N0']
+                cleared_sequences[seq] = {
+                    "N0": point['N0'],
+                    "id": point['id'],
+                    "parent_id": point['parent_id'],
+                    "mutation_cycle": point['mutation_cycle'],
+                    "born": point['born'],
+                    "active": point['active']
+                }
 
             # save inactive a points to cycle specific csv file
             save_a_points_to_file(folder_path_c, cycle_num, cleared_sequences)
@@ -415,6 +475,8 @@ def polonies_amplification(s_radius: float,
             # Also update coords_a and query_results accordingly.
             coords_c = np.column_stack((c_points_active['x'], c_points_active['y']))
             query_results_d = d_tree.query_ball_point(coords_c, r=aoe_radius)
+
+        a_points_active["active"] += 1
 
         # Create a boolean mask for b_points that are within any active a point's aoe.
         pending_mask_b = np.zeros(len(b_points), dtype=bool)
@@ -496,7 +558,17 @@ def polonies_amplification(s_radius: float,
                 b_point = pending_b_points[pending_idx]
                 new_seq, mutated = process_mutation(a_point['sequence'], mutation_rate, mutation_probabilities)
                 # Create a new point with the p_point's coordinates.
-                new_point = {"x": b_point[0], "y": b_point[1], "sequence": new_seq, "N0": 1}
+                new_point = {
+                    "x": b_point[0],
+                    "y": b_point[1],
+                    "sequence": new_seq,
+                    "N0": 1,
+                    "id": available_ids.pop(),  # assign a new unique id
+                    "parent_id": a_point["id"],  # parent's id
+                    "mutation_cycle": cycle_num,
+                    "born": cycle_num,
+                    "active": 0
+                }
                 next_active_a_points_list.append(a_point)
                 next_active_a_points_list.append(new_point)
                 indices_to_remove_a.add(a_idx)
@@ -509,7 +581,17 @@ def polonies_amplification(s_radius: float,
                 d_point = pending_d_points[pending_idx]
                 new_seq, mutated = process_mutation(c_point['sequence'], mutation_rate, mutation_probabilities)
                 # Create a new point with the p_point's coordinates.
-                new_point = {"x": d_point[0], "y": d_point[1], "sequence": new_seq, "N0": 1}
+                new_point = {
+                    "x": d_point[0],
+                    "y": d_point[1],
+                    "sequence": new_seq,
+                    "N0": 1,
+                    "id": available_ids.pop(),  # assign a new unique id
+                    "parent_id": c_point["id"],  # parent's id
+                    "mutation_cycle": cycle_num,
+                    "born": cycle_num,
+                    "active": 0
+                }
                 next_active_c_points_list.append(c_point)
                 next_active_c_points_list.append(new_point)
                 indices_to_remove_c.add(c_idx)
@@ -572,11 +654,9 @@ def polonies_amplification(s_radius: float,
     # Write the combined rows into the final 'cleared_sequences.csv' file
     with open(output_file_path, mode='w', newline='') as file:
         writer = csv.writer(file)
-
-        # Write the header
-        writer.writerow(['sequence', 'N0'])
-
-        # Write the combined data
+        # Write the header with all the desired fields.
+        writer.writerow(['sequence', 'N0', 'id', 'parent_id', 'mutation_cycle', 'born', 'active'])
+        # Write the combined data (each row should have 7 elements in the correct order)
         writer.writerows(all_rows)
 
     # Delete the folder after the files are combined and deleted
@@ -586,31 +666,26 @@ def polonies_amplification(s_radius: float,
     # End simulation cycles.
     print("Simulation ended.")
 
-    # Create a dictionary to collapse duplicates.
-    dedup = {}
-
+    sequences_polony_amp = []
     with open(output_file_path, "r", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            # Skip rows that are duplicate headers.
             if row["sequence"] == "sequence":
                 continue
-            encoded_seq = row["sequence"]
             try:
                 n0 = int(row["N0"])
             except ValueError:
-                continue  # skip rows with invalid N0 values
-            # If the encoded sequence is already seen, add the count; otherwise, create new entry.
-            if encoded_seq in dedup:
-                dedup[encoded_seq] += n0
-            else:
-                dedup[encoded_seq] = n0
-
-    # Build the final list of deduplicated and decoded rows.
-    sequences_polony_amp = []
-    for encoded_seq, total_n0 in dedup.items():
-        decoded_seq = decode(encoded_seq)
-        sequences_polony_amp.append({"sequence": decoded_seq, "N0": total_n0})
+                continue
+            decoded_seq = decode(row["sequence"])
+            sequences_polony_amp.append({
+                "sequence": decoded_seq,
+                "N0": n0,
+                "id": row["id"],
+                "parent_id": row["parent_id"],
+                "mutation_cycle": row["mutation_cycle"],
+                "born": row["born"],
+                "active": row["active"]
+            })
 
     polonies_output = f"results1/polonies_{base}{ext}"
 
