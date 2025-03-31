@@ -240,7 +240,7 @@ def generate_a_points(sequences: list, s_radius: float) -> np.ndarray:
     a_points['y'] = r * np.sin(theta)
 
     a_points['id'] = 0
-    a_points['parent_id'] = a_points['id']
+    a_points['parent_id'] = 0
     a_points['mutation_cycle'] = 0
     a_points['born'] = 0
     a_points['active'] = 0
@@ -285,29 +285,39 @@ def generate_new_a_points(new_a_points_list: list) -> np.ndarray:
     return new_a_points_array
 
 
-def save_a_points_to_file(folder_path: str, cycle_num: int, cleared_sequences: dict):
-    # make sure the folder exists, if not, create it
+def save_a_points_to_file(folder_path: str, cycle_num: int, cleared_sequences: list):
+    """
+    Saves a list of dictionaries to a CSV file with the columns:
+    sequence, N0, parent_id, mutation_cycle, active, id, born.
+
+    Parameters:
+        folder_path (str): The folder where the CSV file will be saved.
+        cycle_num (int): A cycle number used to name the CSV file.
+        cleared_sequences (list): A list of dictionaries. Each dictionary should have the following keys:
+                                  'sequence', 'N0', 'parent_id', 'mutation_cycle', 'active', 'id', and 'born'.
+    """
+    # Ensure the folder exists
     os.makedirs(folder_path, exist_ok=True)
 
     # Define the CSV file path with cycle number
     csv_file_path = os.path.join(folder_path, f'cleared_sequences{cycle_num}.csv')
 
-    # Write the dictionary to a CSV file
+    # Write the data to the CSV file with the specified column order
     with open(csv_file_path, mode='w', newline='') as file:
         writer = csv.writer(file)
+        # Write header in the specified order
+        writer.writerow(['sequence', 'N0', 'parent_id', 'mutation_cycle', 'active', 'id', 'born'])
 
-        # Write the header
-        writer.writerow(['sequence', 'N0', 'id', 'parent_id', 'mutation_cycle', 'born', 'active'])
-        # Write the data (sequence, N0)
-        for seq, attributes in cleared_sequences.items():
+        # Write each dictionary's values in the corresponding order
+        for record in cleared_sequences:
             writer.writerow([
-                seq,
-                attributes['N0'],
-                attributes.get('id', ''),
-                attributes.get('parent_id', ''),
-                attributes.get('mutation_cycle', ''),
-                attributes.get('born', ''),
-                attributes.get('active', '')
+                record.get('sequence', ''),
+                record.get('N0', ''),
+                record.get('id', ''),
+                record.get('parent_id', ''),
+                record.get('mutation_cycle', ''),
+                record.get('active', ''),
+                record.get('born', '')
             ])
 
 
@@ -344,23 +354,7 @@ def polonies_amplification(s_radius: float,
                            mutation_rate: float,
                            mutation_probabilities: Dict[str, float],
                            output: str = "final_output.csv"):
-    """
-    Runs the simulation.
 
-    - p_points: All points within the circle of radius s_radius (generated using density).
-    - a_points_active: Each active a point (with coordinate, sequence, and N0) is generated from
-      the input list 'sequences'.
-    - aoe_radius is directly provided and represents the radius of the area of effect for each a point.
-    - In each cycle, all p_points that lie within any a point's aoe are removed from p_points and
-      assigned to pending_p_points. Then every active a point tries to pick one p point (from pending)
-      that lies within its own aoe – if successful (according to success_prob) then that connection
-      is accepted (collisions resolved randomly), processed via process_mutation, and the "a" point is
-      moved to the next cycle. Active a points that at the beginning of a cycle have no p point
-      in their aoe are removed (their sequence is saved for CSV output).
-    - The simulation repeats cycles until no active a points remain.
-    - Finally, a CSV file is written with header: sequence,N0, where duplicate sequences are
-      collapsed with N0 counts summed.
-    """
     # Generate initial points.
     bd_points = generate_points(s_radius, density)  # np.array
     ac_points = generate_a_points(sequences, s_radius)  # np.array
@@ -386,14 +380,12 @@ def polonies_amplification(s_radius: float,
     b_points = bd_points[indices2[:mid2]]
     d_points = bd_points[indices2[mid2:]]
 
-    # Assign unique IDs to initial a and c points and remove those ids from the pool.
-    for point in a_points_active:
-        point["id"] = available_ids.pop()
-    for point in c_points_active:
-        point["id"] = available_ids.pop()
+    # Set id and parent_id fields for a_points_active and c_points_active.
+    new_ids = [available_ids.pop() for _ in range(len(a_points_active))]
+    a_points_active['id'] = new_ids
+    a_points_active['parent_id'] = new_ids
 
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
-    cleared_sequences = {}  # key: sequence, value: cumulative N0
     folder_name = "results1/helping_folder"
 
     if not os.path.exists(folder_name):
@@ -405,9 +397,11 @@ def polonies_amplification(s_radius: float,
     aoe_radius = s_radius * aoe_radius/100
     # Define the output file for concatenated results
     output_file_path = f"results1/helping_folder/cleared_sequences_{base}.csv"
-
+    cleared_sequences_outside = []
     cycle_num = 0
+    saved_ids = set()
     while True:
+        cleared_sequences = []
         cycle_num += 1
         print(f"Cycle {cycle_num}: {len(a_points_active)} active a points, {len(b_points)} remaining b points")
         print(f"Cycle {cycle_num}: {len(c_points_active)} active a points, {len(d_points)} remaining d points")
@@ -415,10 +409,22 @@ def polonies_amplification(s_radius: float,
         # Two fail-safe if statements:
         # Termination: if no active a points remain, break.
         if len(a_points_active) == 0 or len(c_points_active) == 0:
+            for arr in [a_points_active, c_points_active]:
+                for point in arr:
+                    seq = point['sequence']
+                    cleared_sequences_outside.append({
+                        "sequence": seq,
+                        "N0": point['N0'],
+                        "id": point['id'],
+                        "parent_id": point['parent_id'],
+                        "mutation_cycle": point['mutation_cycle'],
+                        "born": point['born'],
+                        "active": point['active']
+                    })
             break
 
         # --- Determine pending p points ---
-        # Build a KDTree on p_points.
+        # Search for nearby P points by building a KDTree on p_points.
         b_tree = cKDTree(b_points)
         d_tree = cKDTree(d_points)
         # Get coordinates of active a points.
@@ -436,18 +442,20 @@ def polonies_amplification(s_radius: float,
             # Remove these a points and add their sequences to cleared_sequences.
             for point in a_points_active[no_pending_mask_b]:
                 seq = point['sequence']
-                cleared_sequences[seq] = {
+                cleared_sequences.append({
+                    "sequence": seq,
                     "N0": point['N0'],
                     "id": point['id'],
                     "parent_id": point['parent_id'],
                     "mutation_cycle": point['mutation_cycle'],
                     "born": point['born'],
                     "active": point['active']
-                }
-
+                })
             # save inactive a points to cycle specific csv file
             save_a_points_to_file(folder_path_a, cycle_num, cleared_sequences)
-
+            # Add saved IDs to the set
+            for record in cleared_sequences:
+                saved_ids.add(record["id"])
             # Keep only those with at least one nearby p point.
             a_points_active = a_points_active[~no_pending_mask_b]
             # Also update coords_a and query_results accordingly.
@@ -458,18 +466,20 @@ def polonies_amplification(s_radius: float,
             # Remove these a points and add their sequences to cleared_sequences.
             for point in c_points_active[no_pending_mask_d]:
                 seq = point['sequence']
-                cleared_sequences[seq] = {
+                cleared_sequences.append({
+                    "sequence": seq,
                     "N0": point['N0'],
                     "id": point['id'],
                     "parent_id": point['parent_id'],
                     "mutation_cycle": point['mutation_cycle'],
                     "born": point['born'],
                     "active": point['active']
-                }
-
+                })
             # save inactive a points to cycle specific csv file
             save_a_points_to_file(folder_path_c, cycle_num, cleared_sequences)
-
+            # Add saved IDs to the set
+            for record in cleared_sequences:
+                saved_ids.add(record["id"])
             # Keep only those with at least one nearby p point.
             c_points_active = c_points_active[~no_pending_mask_d]
             # Also update coords_a and query_results accordingly.
@@ -477,6 +487,7 @@ def polonies_amplification(s_radius: float,
             query_results_d = d_tree.query_ball_point(coords_c, r=aoe_radius)
 
         a_points_active["active"] += 1
+        c_points_active["active"] += 1
 
         # Create a boolean mask for b_points that are within any active a point's aoe.
         pending_mask_b = np.zeros(len(b_points), dtype=bool)
@@ -532,6 +543,18 @@ def polonies_amplification(s_radius: float,
                     connection_attempts_c.setdefault(chosen, []).append(i)
             # If no a point found any pending p point, break out.
             if not connection_attempts_c:
+                for arr in [a_points_active, c_points_active]:
+                    for point in arr:
+                        seq = point['sequence']
+                        cleared_sequences_outside.append({
+                            "sequence": seq,
+                            "N0": point['N0'],
+                            "id": point['id'],
+                            "parent_id": point['parent_id'],
+                            "mutation_cycle": point['mutation_cycle'],
+                            "born": point['born'],
+                            "active": point['active']
+                        })
                 break
 
             # Collision resolution and success check.
@@ -623,6 +646,7 @@ def polonies_amplification(s_radius: float,
 
             # (Remaining a_points_active will try again if there are still pending p points.)
 
+
         # *** Merge leftover pending points back into the main pool ***
         # Any pending p_points that were not used are returned to p_points.
         b_points = np.concatenate((b_points, pending_b_points))
@@ -631,17 +655,16 @@ def polonies_amplification(s_radius: float,
         d_points = np.concatenate((d_points, pending_d_points))
         print(f"After merging, d_points has {len(d_points)} points.")
 
-        # End of connection attempts for this cycle.
         if next_active_a_points_list:
             a_points_active = generate_new_a_points(next_active_a_points_list)
         else:
             a_points_active = np.empty(0, dtype=a_points_active.dtype)
 
-        # End of connection attempts for this cycle.
         if next_active_c_points_list:
             c_points_active = generate_new_a_points(next_active_c_points_list)
         else:
             c_points_active = np.empty(0, dtype=c_points_active.dtype)
+        # Else, leave c_points_active unchanged.
         if cycle_num == 1 and simulate:
             true_barcodes = "true_barcodes.csv"
             animate_simulation(s_radius, density, true_barcodes, aoe_radius, success_prob)
@@ -650,6 +673,25 @@ def polonies_amplification(s_radius: float,
     rows_a = conjugate_files(folder_path_a)
     rows_c = conjugate_files(folder_path_c)
     all_rows = rows_a + rows_c
+
+    # Save remaining active a and c points to cleared_sequences
+    # Save remaining active a and c points to separate cleared_sequences lists
+    for arr in [a_points_active, c_points_active]:
+        local_cleared = []
+        for point in arr:
+            local_cleared.append({
+                "sequence": point['sequence'],
+                "N0": point['N0'],
+                "id": point['id'],
+                "parent_id": point['parent_id'],
+                "mutation_cycle": point['mutation_cycle'],
+                "born": point['born'],
+                "active": point['active']
+            })
+        if arr is a_points_active:
+            save_a_points_to_file(folder_path_a, cycle_num + 1, local_cleared)
+        elif arr is c_points_active:
+            save_a_points_to_file(folder_path_c, cycle_num + 1, local_cleared)
 
     # Write the combined rows into the final 'cleared_sequences.csv' file
     with open(output_file_path, mode='w', newline='') as file:
@@ -666,26 +708,28 @@ def polonies_amplification(s_radius: float,
     # End simulation cycles.
     print("Simulation ended.")
 
+    seen = set()
     sequences_polony_amp = []
+
     with open(output_file_path, "r", newline="") as csvfile:
         reader = csv.DictReader(csvfile)
+        sequences_polony_amp = []
+
         for row in reader:
             if row["sequence"] == "sequence":
-                continue
-            try:
-                n0 = int(row["N0"])
-            except ValueError:
-                continue
+                continue  # Skip potential duplicate headers
+
             decoded_seq = decode(row["sequence"])
-            sequences_polony_amp.append({
+            entry = {
                 "sequence": decoded_seq,
-                "N0": n0,
+                "N0": int(row["N0"]),
                 "id": row["id"],
                 "parent_id": row["parent_id"],
                 "mutation_cycle": row["mutation_cycle"],
                 "born": row["born"],
                 "active": row["active"]
-            })
+            }
+            sequences_polony_amp.append(entry)
 
     polonies_output = f"results1/polonies_{base}{ext}"
 
