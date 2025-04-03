@@ -3,7 +3,8 @@ import csv
 import logging
 import matplotlib.pyplot as plt
 import math
-from amplifying import pcr_amplification, polonies_amplification
+from polonies_amplifying import polonies_amplification
+from pcr_amplifying import pcr_amplification
 from generate import generate_sequences
 import os
 
@@ -150,7 +151,7 @@ def main():
                 output=args.output,
             )
             with open(polonies_output, 'w', newline='') as csvfile:
-                fieldnames = ['sequence', 'N0', 'id', 'parent_id', 'mutation_cycle', 'active', 'born']
+                fieldnames = ['sequence', 'N0', 'id', 'parent_id', "x", "y", "born", "active"]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for seq_dict in sequences_polony_amp:
