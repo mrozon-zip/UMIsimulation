@@ -5,14 +5,14 @@ from typing import Dict, Tuple, List, Union
 random.seed(42)
 
 # Global nucleotides list
-NUCLEOTIDES = ['A', 'C', 'G', 'T']
+NUCLEOTIDES = ['A', 'C', 'G', 'T', 'X']
 
 def encode(sequence: str) -> int:
     """
     Encodes a DNA sequence (composed of A, G, C, T) to an integer,
     using mapping: A->1, G->2, C->3, T->4.
     """
-    mapping = {'A': 1, 'G': 2, 'C': 3, 'T': 4}
+    mapping = {'A': 1, 'G': 2, 'C': 3, 'T': 4, 'X': 5}
     result = 0
     for char in sequence:
         result = result * 10 + mapping[char]
@@ -23,9 +23,10 @@ def decode(number: int) -> str:
     """
     Decodes an integer (encoded via the above encode function) back to a DNA sequence.
     """
-    mapping = {'1': 'A', '2': 'G', '3': 'C', '4': 'T'}
+    mapping = {'1': 'A', '2': 'G', '3': 'C', '4': 'T', '5': 'X'}
     s = str(number)
     return ''.join(mapping[digit] for digit in s)
+
 
 def compute_global_p(current_n: float, remaining_substrate: float, substrate_capacity_initial: float,
                      s: float, k: float, c: float) -> float:
@@ -79,7 +80,8 @@ def process_mutation(sequence: Union[str, int], mutation_rate: float,
                     seq_list[i] = random.choice(options)
                     i += 1
                 elif mutation_type == 'deletion':
-                    del seq_list[i]
+                    seq_list[i] = 'X'
+                    i += 1
                     # Do not increment i; next nucleotide shifts into this position.
                 elif mutation_type == 'insertion':
                     inserted = random.choice(NUCLEOTIDES)
@@ -109,7 +111,8 @@ def process_mutation(sequence: Union[str, int], mutation_rate: float,
                     seq_list[i] = random.choice(options)
                     i += 1
                 elif mutation_type == 'deletion':
-                    del seq_list[i]
+                    seq_list[i] = 'X'
+                    i += 1
                     # Do not increment i; next nucleotide shifts into this position.
                 elif mutation_type == 'insertion':
                     inserted = random.choice(NUCLEOTIDES)

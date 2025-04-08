@@ -33,8 +33,6 @@ def generate_points(s_radius: float, density: float) -> np.ndarray:
     points = np.empty(total_points, dtype=dtype)
     points['x'] = x
     points['y'] = y
-    points['born'] = 0
-    points['active'] = 0
     return points
 
 
@@ -180,7 +178,6 @@ def polonies_amplification(s_radius: float,
     # Total pool size is the sum of all initial points (a + b points).
     total_possible_ids = len(ac_points) + len(bd_points)
     available_ids = list(range(total_possible_ids))
-    print(len(available_ids))
     random.shuffle(available_ids)  # Shuffle so that pop() returns a random id
 
     # Randomly permute indices
@@ -609,9 +606,11 @@ def polonies_amplification(s_radius: float,
                                       "active": [active]}
 
     # Build the final list of deduplicated and decoded rows.
+    decoded_sequences = {encoded_seq: decode(encoded_seq) for encoded_seq in dedup}
+    max_len = max(len(seq) for seq in decoded_sequences.values())
     sequences_polony_amp = []
     for encoded_seq, data in dedup.items():
-        decoded_seq = decode(encoded_seq)
+        decoded_seq = decoded_sequences[encoded_seq].ljust(max_len, 'X')
         sequences_polony_amp.append({
             "sequence": decoded_seq,
             "N0": data["N0"],

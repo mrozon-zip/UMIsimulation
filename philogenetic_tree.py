@@ -2,6 +2,7 @@ import csv
 import ast
 import matplotlib.pyplot as plt
 from Bio import Phylo
+import xml.etree.ElementTree as ET
 
 
 # --- Data Loading and Conversion ---
@@ -103,9 +104,6 @@ def group_data_by_relationship(data):
     return groups, orphan_count
 
 
-import xml.etree.ElementTree as ET
-
-
 def is_one_edit_distance(s, t):
     """
     Check if s and t differ by exactly one edit (insertion, deletion, or substitution).
@@ -149,8 +147,12 @@ def build_tree_xml(current_index, group, used):
     node = group[current_index]
     # Create clade element and add the name (formatted as "sequence,n0")
     clade = ET.Element("clade", branch_length="1")
-    name_elem = ET.SubElement(clade, "name")
+    # Create a separate sub-clade for the node’s info:
+    node_info = ET.Element("clade", branch_length="1")
+    name_elem = ET.SubElement(node_info, "name")
     name_elem.text = f"{node['sequence']},{node['N0']}"
+    clade.append(node_info)
+    # ... then append child clades to clade as before
     used.add(current_index)
     # Look for children: dictionaries not yet used and one edit away from current node's sequence.
     for i, d in enumerate(group):
@@ -207,10 +209,11 @@ def write_phyloxml_files(list_of_groups):
 
 # Example usage:
 if __name__ == "__main__":
-    groups, orphan_count = group_data_by_relationship(load_data("results1/polonies_amplified.csv"))
+    groups, orphan_count = group_data_by_relationship(load_data("results1/pcr_pcr.csv"))
     write_phyloxml_files(groups)
     print("Number of groups:", len(groups))
     # Read a single tree from the file
-    tree = Phylo.read('results2/phylo_group1.xml', 'phyloxml')
+    tree = Phylo.read('results2/phylo_group2.xml', 'phyloxml')
     Phylo.draw(tree)
     plt.show()
+    plt.savefig('phylo_tree.png')

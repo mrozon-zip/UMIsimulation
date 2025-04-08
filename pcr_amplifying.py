@@ -26,6 +26,17 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
     """
     total_sequences_history = []
     remaining_substrate = substrate_capacity_initial
+    total_possible_ids = substrate_capacity_initial + len(sequences)
+    print(substrate_capacity_initial)
+    print(len(sequences))
+    print(total_possible_ids)
+    available_ids = list(range(total_possible_ids))
+    random.shuffle(available_ids)
+    for sequence in sequences:
+        sequence['id'] = available_ids.pop()
+        sequence['parent_id'] = ''
+        sequence['born'] = 0
+        sequence['active'] = 0
     k = s * 10
     for cycle in range(1, cycles + 1):
         logging.info(f"PCR Amplification: Cycle {cycle} starting with {len(sequences)} sequences.")
@@ -33,21 +44,37 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
         p = compute_global_p(current_n, remaining_substrate, substrate_capacity_initial, s, k, c)
         logging.info(f"Cycle {cycle}: Global amplification probability = {p:.4f}")
         new_sequences = []
-        for seq_dict in sequences:
-            if random.random() < p:
-                replication_count = seq_dict['N0']
-                no_mutation_count = 0
-                for _ in range(replication_count):
+        if remaining_substrate < len(sequences):
+            for seq_dict in sequences[:remaining_substrate]:
+                if random.random() < p:
                     mutated_seq, mutation_occurred = process_mutation(
                         seq_dict['sequence'],
                         mutation_rate,
                         mutation_probabilities
                     )
-                    if mutation_occurred:
-                        new_sequences.append({'sequence': mutated_seq, 'N0': 1})
-                    else:
-                        no_mutation_count += 1
-                seq_dict['N0'] += no_mutation_count
+                    new_sequences.append({'sequence': mutated_seq,
+                                          'N0': 1,
+                                          'id': available_ids.pop(),
+                                          'parent_id': seq_dict["id"],
+                                          'born': cycle,
+                                          'active': 0})
+                seq_dict['active'] += 1
+        else:
+            for seq_dict in sequences:
+                if random.random() < p:
+                    mutated_seq, mutation_occurred = process_mutation(
+                        seq_dict['sequence'],
+                        mutation_rate,
+                        mutation_probabilities
+                    )
+                    new_sequences.append({'sequence': mutated_seq,
+                                          'N0': 1,
+                                          'id': available_ids.pop(),
+                                          'parent_id': seq_dict["id"],
+                                          'born': cycle,
+                                          'active': 0
+                                          })
+                seq_dict['active'] += 1
         sequences.extend(new_sequences)
         new_total = sum(seq['N0'] for seq in sequences)
         delta_n = new_total - current_n
@@ -56,6 +83,32 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
         logging.info(
             f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}"
         )
+    if sequences:
+        # Pad each sequence in the list with 'X' to match the length of the longest sequence.
+        max_len = max(len(seq["sequence"]) for seq in sequences)
+        for seq in sequences:
+            seq["sequence"] = seq["sequence"].ljust(max_len, 'X')
+
+        # Collapse duplicates: merge dictionaries with the same 'sequence' value.
+        collapsed = {}
+        for seq in sequences:
+            key = seq["sequence"]
+            if key not in collapsed:
+                collapsed[key] = {
+                    "sequence": key,
+                    "N0": seq["N0"],
+                    "id": [seq["id"]],
+                    "parent_id": [seq["parent_id"]],
+                    "born": [seq["born"]],
+                    "active": [seq["active"]]
+                }
+            else:
+                collapsed[key]["N0"] += seq["N0"]
+                collapsed[key]["id"].append(seq["id"])
+                collapsed[key]["parent_id"].append(seq["parent_id"])
+                collapsed[key]["born"].append(seq["born"])
+                collapsed[key]["active"].append(seq["active"])
+        sequences = list(collapsed.values())
     base, ext = os.path.splitext(output)
     pcr_output = f"results1/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output

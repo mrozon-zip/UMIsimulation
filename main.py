@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import math
 from polonies_amplifying import polonies_amplification
 from pcr_amplifying import pcr_amplification
+import subprocess
 from generate import generate_sequences
+from analysis import confusion_matrix
+from wrapper import csv_to_sam, bam_to_csv
 import os
 
 os.makedirs("results", exist_ok=True)
@@ -60,13 +63,16 @@ def main():
     # Subcommand: denoise
     denoise_parser = subparsers.add_parser('denoise', help="Denoise amplified sequences")
     denoise_parser.add_argument('--input', type=str, required=True, help="Input CSV filename for denoising")
-    denoise_parser.add_argument('--method', type=str, choices=['simple', 'directional'], required=True,
-                                help="Denoising method to use")
-    denoise_parser.add_argument('--threshold', type=int, default=300, help="Threshold for simple denoising")
-    denoise_parser.add_argument('--output', type=str, default='denoised.csv',
-                                help="Output CSV filename for denoised sequences")
-    denoise_parser.add_argument("--show", type=int, default=3, help='Determine what plots to be shown')
-    denoise_parser.add_argument('--input_true_barcodes', type=str, default='true_barcodes.csv')
+    #denoise_parser.add_argument('--output', type=str, default='denoised.csv',
+    #                            help="Output CSV filename for denoised sequences")
+
+    # Subcommand: analyse
+    denoise_parser = subparsers.add_parser('analyse', help='Analysis of results')
+    denoise_parser.add_argument('--true_barcodes', type=str, default='true_barcodes.csv')
+    denoise_parser.add_argument('--pcr', type=str, help='pcr denoising output file')
+    denoise_parser.add_argument('--pcr_amplified', type=str, help='pcr amplified output file')
+    denoise_parser.add_argument('--polonies', type=str, help='polonies denoising output file')
+    denoise_parser.add_argument('--polonies_amplified', type=str, help='polonies amplified output file')
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -104,36 +110,12 @@ def main():
                 output=args.output,
             )
             with open(pcr_output, 'w', newline='') as f:
-                fieldnames = ['sequence', 'N0']
+                fieldnames = ['sequence', 'N0', 'id', 'parent_id', 'active', 'born']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for seq in sequences_pcr:
                     writer.writerow(seq)
             logging.info(f"PCR amplification complete. Results saved to {pcr_output}.")
-
-        #if args.method in ['bridge', 'both_12']:
-        #    sequences_bridge = [dict(seq) for seq in sequences]
-        #    logging.info("Starting Bridge amplification...")
-        #    sequences_bridge_amp, history_bridge, grid, bridge_output = bridge_amplification(
-        #        sequences_bridge,
-        #        mutation_rate=args.mutation_rate,
-        #        mutation_probabilities=mutation_probabilities,
-        #        simulate=args.simulate,
-       #        s_radius=args.S_radius,
-        #        aoe_radius=args.AOE_radius,
-        #        density=args.density,
-        #        success_prob=args.success_prob,
-        #        deviation=args.deviation,
-        #        output=args.output,
-        #    )
-        #    with open(bridge_output, 'w', newline='') as csvfile:
-        #        fieldnames = ['sequence', 'N0']
-        #        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        #        writer.writeheader()
-        #        for seq_dict in sequences_bridge_amp:
-        #            writer.writerow(seq_dict)
-#
-        #    logging.info(f"Generated {len(sequences_bridge_amp)} sequences and saved to {bridge_output}")
 
         if args.method in ['polonies_amplification', 'both_13']:
             sequences_bridge = [dict(seq) for seq in sequences]
@@ -162,9 +144,47 @@ def main():
             # (Plotting code as before)
             plt.show()
 
-    elif args.command == 'denoise':
-        # Denoising code
-        pass
+    # Suppose this is part of your command handling
+    if args.command == 'denoise':
+        input_file = args.input
+        root, _ = os.path.splitext(input_file)
+
+        # File names for intermediate and final outputs.
+        output_sam = f"{root}.sam"  # Used by csv_to_sam()
+        output_csv = f"{root}_denoised.csv"  # Final CSV output
+
+        # Convert CSV input to a SAM file.
+        csv_to_sam(input_file, output_sam)
+
+        # Create a multi-line bash command string.
+        # - The first line converts SAM to BAM using samtools.
+        # - The second line sorts the BAM file.
+        # - The third line deduplicates the sorted BAM using umi_tools.
+        bash_command = f"""
+        samtools view -S -b {output_sam} > {root}.bam
+        samtools sort {root}.bam -o sorted.bam
+        samtools index sorted.bam
+        umi_tools dedup -I sorted.bam -S deduped.bam --method=directional
+        """
+
+        # Run the bash command.
+        # Using shell=True allows you to run a multi-line command.
+        # check=True will raise an error if any command fails.
+        subprocess.run(bash_command, shell=True, check=True)
+
+        # Use the deduplicated BAM file as input for the CSV conversion.
+        input_bam = "deduped.bam"
+        bam_to_csv(input_bam, output_csv)
+
+    elif args.command == 'analyse':
+        con_mat_pcr = confusion_matrix(denoised_file=args.pcr,
+                                       amplified=args.pcr_amplified,
+                                       true_umis_file=args.true_barcodes)
+        con_mat_polonies = confusion_matrix(denoised_file=args.polonies,
+                                            amplified=args.polonies_amplified,
+                                            true_umis_file=args.true_barcodes)
+        print(con_mat_pcr)
+        print(con_mat_polonies)
 
 if __name__ == "__main__":
     # Optional: on Windows, call freeze_support() if needed:
