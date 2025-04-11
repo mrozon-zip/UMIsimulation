@@ -84,31 +84,13 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
             f"Cycle {cycle} complete. Total unique sequences: {len(sequences)}; Remaining substrate: {remaining_substrate}"
         )
     if sequences:
-        # Pad each sequence in the list with 'X' to match the length of the longest sequence.
-        max_len = max(len(seq["sequence"]) for seq in sequences)
+        # Adjust each sequence's length to match the length of the first sequence.
+        desired_length = len(sequences[0]['sequence'])
         for seq in sequences:
-            seq["sequence"] = seq["sequence"].ljust(max_len, 'X')
-
-        # Collapse duplicates: merge dictionaries with the same 'sequence' value.
-        collapsed = {}
-        for seq in sequences:
-            key = seq["sequence"]
-            if key not in collapsed:
-                collapsed[key] = {
-                    "sequence": key,
-                    "N0": seq["N0"],
-                    "id": [seq["id"]],
-                    "parent_id": [seq["parent_id"]],
-                    "born": [seq["born"]],
-                    "active": [seq["active"]]
-                }
-            else:
-                collapsed[key]["N0"] += seq["N0"]
-                collapsed[key]["id"].append(seq["id"])
-                collapsed[key]["parent_id"].append(seq["parent_id"])
-                collapsed[key]["born"].append(seq["born"])
-                collapsed[key]["active"].append(seq["active"])
-        sequences = list(collapsed.values())
+            if len(seq["sequence"]) > desired_length:
+                seq["sequence"] = seq["sequence"][ :desired_length]
+            elif len(seq["sequence"]) < desired_length:
+                seq["sequence"] = seq["sequence"] + ''.join(random.choices(['A', 'C', 'G', 'T'], k=desired_length - len(seq["sequence"])))
     base, ext = os.path.splitext(output)
     pcr_output = f"results1/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output

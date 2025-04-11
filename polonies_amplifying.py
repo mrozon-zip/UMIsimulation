@@ -606,11 +606,15 @@ def polonies_amplification(s_radius: float,
                                       "active": [active]}
 
     # Build the final list of deduplicated and decoded rows.
+    desired_length = len(sequences[0]['sequence'])
     decoded_sequences = {encoded_seq: decode(encoded_seq) for encoded_seq in dedup}
-    max_len = max(len(seq) for seq in decoded_sequences.values())
     sequences_polony_amp = []
     for encoded_seq, data in dedup.items():
-        decoded_seq = decoded_sequences[encoded_seq].ljust(max_len, 'X')
+        decoded_seq = decoded_sequences[encoded_seq]
+        if len(decoded_seq) > desired_length:
+            decoded_seq = decoded_seq[:desired_length]
+        elif len(decoded_seq) < desired_length:
+            decoded_seq = decoded_seq + ''.join(random.choices(NUCLEOTIDES, k=desired_length - len(decoded_seq)))
         sequences_polony_amp.append({
             "sequence": decoded_seq,
             "N0": data["N0"],
