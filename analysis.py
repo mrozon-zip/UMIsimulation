@@ -1,6 +1,7 @@
 import csv
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
 
 
 def confusion_matrix(denoised_file, amplified, true_umis_file):
@@ -25,6 +26,13 @@ def confusion_matrix(denoised_file, amplified, true_umis_file):
     plt.title("Confusion Matrix")
     plt.xlabel("Actual")
     plt.ylabel("Predicted")
+
+    # Save the plot to a png file in the results1 folder with the same name as the amplified file
+    os.makedirs("results1", exist_ok=True)
+    base_name = os.path.basename(amplified)
+    plot_file = os.path.join("results1", os.path.splitext(base_name)[0] + ".png")
+    plt.savefig(plot_file)
+
     plt.show()
 
     print(f"True Positives (TP): {tp}")

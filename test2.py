@@ -1,4 +1,6 @@
+import os
 import csv
+import random
 
 def csv_to_list_of_dicts(filename):
     """
@@ -85,3 +87,104 @@ def assign_connections(data):
                 if levenshtein_distance(seq_a, seq_b) == 1:
                     connections.append(j)
         entry_a["connections"] = connections
+
+
+def group_connected_components(data):
+    """
+    Groups dictionaries into connected components based on their 'connections' field.
+    Returns a list of groups, where each group is a list of indices referring to dictionaries in the input list.
+    """
+    # Build graph as an undirected graph
+    graph = {i: set() for i in range(len(data))}
+    for i, entry in enumerate(data):
+        for j in entry.get("connections", []):
+            graph[i].add(j)
+            graph[j].add(i)
+
+    visited = set()
+    groups = []
+
+    def dfs(node, group):
+        visited.add(node)
+        group.append(node)
+        for neighbor in graph[node]:
+            if neighbor not in visited:
+                dfs(neighbor, group)
+
+    for i in range(len(data)):
+        if i not in visited:
+            group = []
+            dfs(i, group)
+            groups.append(group)
+
+    return groups
+
+
+def collapse_groups(data, groups):
+    """
+    For each group, collapse the dictionaries to the one with the highest N0.
+    If there is a tie for N0 value and it equals 2, pick one randomly.
+    Returns a list of collapsed dictionaries, each containing only the 'sequence' and 'N0' fields.
+    """
+    collapsed = []
+    for group in groups:
+        # Extract group items
+        group_items = [data[i] for i in group]
+        # Convert N0 values to int (defaulting to 0 on failure)
+        group_items_with_n0 = [(item, int(item.get("N0", "0"))) for item in group_items]
+        # Sum N0 values for the group
+        total_n0 = sum(n0 for _, n0 in group_items_with_n0)
+        # Find the maximum N0
+        max_n0 = max(n0 for _, n0 in group_items_with_n0)
+        candidates = [item for item, n0 in group_items_with_n0 if n0 == max_n0]
+        # If tie and value equals 2, choose one randomly
+        if len(candidates) > 1 and max_n0 == 2:
+            chosen = random.choice(candidates)
+        else:
+            chosen = candidates[0]
+        # Create a new collapsed dictionary with updated N0 (as string) and the same sequence
+        chosen_updated = {"sequence": chosen.get("sequence", ""), "N0": str(total_n0)}
+        collapsed.append(chosen_updated)
+    return collapsed
+
+
+def write_collapsed_csv(filename, collapsed_data):
+    """
+    Writes the collapsed dictionaries to a new CSV file.
+    The new file is named by appending '_denoised' before the file extension of the input filename.
+    Only the 'sequence' and 'N0' columns are included in the output.
+    """
+    base, ext = os.path.splitext(filename)
+    out_filename = base + "_denoised" + ext
+    with open(out_filename, mode="w", newline='', encoding="utf-8") as csvfile:
+        fieldnames = ["sequence", "N0"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in collapsed_data:
+            writer.writerow(row)
+
+
+def process_file(filename):
+    """
+    Processes the input CSV file by performing the following steps:
+    - Reads the CSV into a list of dictionaries.
+    - Filters data to retain only 'sequence' and 'N0'.
+    - Assigns connections (using the existing assign_connections function).
+    - Groups connected components.
+    - Collapses each group to a single dictionary.
+    - Writes the collapsed dictionaries to a new CSV file.
+    """
+    data = csv_to_list_of_dicts(filename)
+    filtered_data = filter_data(data)
+    assign_connections(filtered_data)
+    groups = group_connected_components(filtered_data)
+    collapsed = collapse_groups(filtered_data, groups)
+    write_collapsed_csv(filename, collapsed)
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python test2.py <input_csv_file>")
+    else:
+        process_file(sys.argv[1])

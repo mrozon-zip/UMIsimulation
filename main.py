@@ -8,6 +8,7 @@ from pcr_amplifying import pcr_amplification
 import subprocess
 from generate import generate_sequences
 from analysis import confusion_matrix
+from test2 import process_file
 from wrapper import csv_to_sam, bam_to_csv
 import os
 
@@ -63,6 +64,7 @@ def main():
     # Subcommand: denoise
     denoise_parser = subparsers.add_parser('denoise', help="Denoise amplified sequences")
     denoise_parser.add_argument('--input', type=str, required=True, help="Input CSV filename for denoising")
+    denoise_parser.add_argument('--type', type=int, required=True, help="type of denoising")
     #denoise_parser.add_argument('--output', type=str, default='denoised.csv',
     #                            help="Output CSV filename for denoised sequences")
 
@@ -146,35 +148,40 @@ def main():
 
     # Suppose this is part of your command handling
     if args.command == 'denoise':
-        input_file = args.input
-        root, _ = os.path.splitext(input_file)
 
-        # File names for intermediate and final outputs.
-        output_sam = f"{root}.sam"  # Used by csv_to_sam()
-        output_csv = f"{root}_denoised.csv"  # Final CSV output
+        if args.type == 1:
+            input_file = args.input
+            root, _ = os.path.splitext(input_file)
 
-        # Convert CSV input to a SAM file.
-        csv_to_sam(input_file, output_sam)
+            # File names for intermediate and final outputs.
+            output_sam = f"{root}.sam"  # Used by csv_to_sam()
+            output_csv = f"{root}_denoised.csv"  # Final CSV output
 
-        # Create a multi-line bash command string.
-        # - The first line converts SAM to BAM using samtools.
-        # - The second line sorts the BAM file.
-        # - The third line deduplicates the sorted BAM using umi_tools.
-        bash_command = f"""
-        samtools view -S -b {output_sam} > {root}.bam
-        samtools sort {root}.bam -o sorted.bam
-        samtools index sorted.bam
-        umi_tools dedup -I sorted.bam -S deduped.bam --method=directional
-        """
+            # Convert CSV input to a SAM file.
+            csv_to_sam(input_file, output_sam)
 
-        # Run the bash command.
-        # Using shell=True allows you to run a multi-line command.
-        # check=True will raise an error if any command fails.
-        subprocess.run(bash_command, shell=True, check=True)
+            # Create a multi-line bash command string.
+            # - The first line converts SAM to BAM using samtools.
+            # - The second line sorts the BAM file.
+            # - The third line deduplicates the sorted BAM using umi_tools.
+            bash_command = f"""
+            samtools view -S -b {output_sam} > {root}.bam
+            samtools sort {root}.bam -o sorted.bam
+            samtools index sorted.bam
+            umi_tools dedup -I sorted.bam -S deduped.bam --output-stats=deduplicated --extract-umi-method=tag --umi-tag=UB --method=directional
+            """
 
-        # Use the deduplicated BAM file as input for the CSV conversion.
-        input_bam = "deduped.bam"
-        bam_to_csv(input_bam, output_csv)
+            # Run the bash command.
+            # Using shell=True allows you to run a multi-line command.
+            # check=True will raise an error if any command fails.
+            subprocess.run(bash_command, shell=True, check=True)
+
+            # Use the deduplicated BAM file as input for the CSV conversion.
+            input_bam = "deduped.bam"
+            bam_to_csv(input_bam, output_csv)
+        elif args.type == 2:
+            process_file(args.input)
+
 
     elif args.command == 'analyse':
         con_mat_pcr = confusion_matrix(denoised_file=args.pcr,
