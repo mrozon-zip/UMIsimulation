@@ -212,17 +212,17 @@ def polonies_amplification(s_radius: float,
 
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
       # key: sequence, value: cumulative N0
-    folder_name = "results1/helping_folder"
+    folder_name = "results_amplified/helping_folder"
 
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
     # Define the folder where the supporting files will be saved
     base, ext = os.path.splitext(output)
-    helping_files = f"results1/helping_folder/c_supporting_{base}"
-    orphan_file = f"results1/helping_folder/orphan.csv"
+    helping_files = f"results_amplified/helping_folder/c_supporting_{base}"
+    orphan_file = f"results_amplified/helping_folder/orphan.csv"
     aoe_radius = s_radius * aoe_radius/100
     # Define the output file for concatenated results
-    output_file_path = f"results1/helping_folder/cleared_sequences_{base}.csv"
+    output_file_path = f"results_amplified/helping_folder/cleared_sequences_{base}.csv"
 
     cycle_num = 0
     while True:
@@ -235,7 +235,6 @@ def polonies_amplification(s_radius: float,
         if len(a_points_active) == 0 and len(c_points_active) == 0:
             if len(b_points) > 0 or len(d_points) > 0:
                 orphans = np.concatenate((b_points, d_points))
-                print(type(orphans))
             break
 
         # --- Determine pending p points ---
@@ -560,7 +559,6 @@ def polonies_amplification(s_radius: float,
                 })
     # Append the orphan rows to the existing data
     cleared_points.extend(new_points_orphans)
-    print(len(cleared_points))
 
     # Here
     with open(output_file_path, mode='w', newline='') as file:
@@ -626,8 +624,7 @@ def polonies_amplification(s_radius: float,
             "active": data["active"]
         })
 
-    polonies_output = f"results1/polonies_{base}{ext}"
+    polonies_output = f"results_amplified/polonies_{base}{ext}"
 
-    print(len(available_ids))
 
     return sequences_polony_amp, polonies_output

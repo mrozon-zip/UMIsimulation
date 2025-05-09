@@ -202,18 +202,18 @@ def write_phyloxml_files(list_of_groups):
     and writes one phyloXML file per group.
     """
     for idx, group in enumerate(list_of_groups):
-        output_file = f"results2/phylo_group{idx + 1}.xml"
+        output_file = f"dump/results2/phylo_group{idx + 1}.xml"
         create_phyloxml_for_group(group, output_file)
         print(f"Wrote file: {output_file}")
 
 
 # Example usage:
 if __name__ == "__main__":
-    groups, orphan_count = group_data_by_relationship(load_data("results1/pcr_pcr.csv"))
+    groups, orphan_count = group_data_by_relationship(load_data("dump/results1/pcr_pcr.csv"))
     write_phyloxml_files(groups)
     print("Number of groups:", len(groups))
     # Read a single tree from the file
-    tree = Phylo.read('results2/phylo_group2.xml', 'phyloxml')
+    tree = Phylo.read('dump/results2/phylo_group2.xml', 'phyloxml')
     Phylo.draw(tree)
     plt.show()
     plt.savefig('phylo_tree.png')

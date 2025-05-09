@@ -27,9 +27,6 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
     total_sequences_history = []
     remaining_substrate = substrate_capacity_initial
     total_possible_ids = substrate_capacity_initial + len(sequences)
-    print(substrate_capacity_initial)
-    print(len(sequences))
-    print(total_possible_ids)
     available_ids = list(range(total_possible_ids))
     random.shuffle(available_ids)
     for sequence in sequences:
@@ -91,6 +88,28 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
                 seq["sequence"] = seq["sequence"][ :desired_length]
             elif len(seq["sequence"]) < desired_length:
                 seq["sequence"] = seq["sequence"] + ''.join(random.choices(['A', 'C', 'G', 'T'], k=desired_length - len(seq["sequence"])))
+
+    # Collapse sequences with identical sequence string
+    collapsed = {}
+    for seq in sequences:
+        key = seq['sequence']
+        if key not in collapsed:
+            collapsed[key] = {
+                'sequence': key,
+                'N0': seq['N0'],
+                'id': [seq['id']],
+                'parent_id': [seq['parent_id']],
+                'born': [seq['born']],
+                'active': [seq['active']]
+            }
+        else:
+            collapsed[key]['N0'] += seq['N0']
+            collapsed[key]['id'].append(seq['id'])
+            collapsed[key]['parent_id'].append(seq['parent_id'])
+            collapsed[key]['born'].append(seq['born'])
+            collapsed[key]['active'].append(seq['active'])
+    sequences = list(collapsed.values())
+
     base, ext = os.path.splitext(output)
-    pcr_output = f"results1/pcr_{base}{ext}"
+    pcr_output = f"results_amplified/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output

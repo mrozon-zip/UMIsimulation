@@ -85,5 +85,5 @@ def create_heatmap(data, output_filename):
     plt.show()
 
 if __name__ == '__main__':
-    data = load_csv_to_dicts('results1/pcr_amplified.csv')
+    data = load_csv_to_dicts('dump/results1/pcr_amplified.csv')
     create_heatmap(data, 'heatmap_pcr.png')

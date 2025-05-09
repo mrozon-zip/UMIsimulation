@@ -8,11 +8,9 @@ from pcr_amplifying import pcr_amplification
 import subprocess
 from generate import generate_sequences
 from analysis import confusion_matrix
-from test2 import process_file
+from support import process_file
 from wrapper import csv_to_sam, bam_to_csv
 import os
-
-os.makedirs("results", exist_ok=True)
 
 
 def main():
@@ -38,9 +36,9 @@ def main():
                                 help="Probability of substitution mutation")
     amplify_parser.add_argument('--deletion_prob', type=float, default=0.3, help="Probability of deletion mutation")
     amplify_parser.add_argument('--insertion_prob', type=float, default=0.3, help="Probability of insertion mutation")
-    amplify_parser.add_argument('--substrate_capacity', type=float, default=(2 ** 18),
+    amplify_parser.add_argument('--substrate_capacity', type=int, default=(2 ** 18),
                                 help="Initial substrate capacity")
-    amplify_parser.add_argument('--S', type=float, default=9_000_000, help="Threshold S parameter")
+    amplify_parser.add_argument('--S', type=int, default=9_000_000, help="Threshold S parameter")
     amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
     amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv',
                                 help="Input CSV filename with true barcodes")
@@ -69,12 +67,11 @@ def main():
     #                            help="Output CSV filename for denoised sequences")
 
     # Subcommand: analyse
-    denoise_parser = subparsers.add_parser('analyse', help='Analysis of results')
-    denoise_parser.add_argument('--true_barcodes', type=str, default='true_barcodes.csv')
-    denoise_parser.add_argument('--pcr', type=str, help='pcr denoising output file')
-    denoise_parser.add_argument('--pcr_amplified', type=str, help='pcr amplified output file')
-    denoise_parser.add_argument('--polonies', type=str, help='polonies denoising output file')
-    denoise_parser.add_argument('--polonies_amplified', type=str, help='polonies amplified output file')
+    analyse_parser = subparsers.add_parser('analyse', help='Analysis of results')
+    analyse_parser.add_argument('--true_barcodes', type=str, default='true_barcodes.csv')
+    analyse_parser.add_argument('--denoised', type=str, help='pcr denoising output file')
+    analyse_parser.add_argument('--amplified', type=str, help='pcr amplified output file')
+    analyse_parser.add_argument('--plot', type=bool, default=False)
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -118,6 +115,14 @@ def main():
                 for seq in sequences_pcr:
                     writer.writerow(seq)
             logging.info(f"PCR amplification complete. Results saved to {pcr_output}.")
+            if args.plot:
+                plt.plot(range(1, len(history_pcr) + 1), history_pcr)
+                plt.xlabel("Cycle")
+                plt.ylabel("Value")
+                plt.title("PCR Amplification History")
+                plt.grid(True)
+                plt.show()
+                print(history_pcr)
 
         if args.method in ['polonies_amplification', 'both_13']:
             sequences_bridge = [dict(seq) for seq in sequences]
@@ -151,11 +156,12 @@ def main():
 
         if args.type == 1:
             input_file = args.input
-            root, _ = os.path.splitext(input_file)
+            input_file_simple = os.path.basename(args.input)
+            root, _ = os.path.splitext(input_file_simple)
 
             # File names for intermediate and final outputs.
-            output_sam = f"{root}.sam"  # Used by csv_to_sam()
-            output_csv = f"{root}_denoised.csv"  # Final CSV output
+            output_sam = f"results_denoised/helping_folder/{root}.sam"  # Used by csv_to_sam()
+            output_csv = f"results_denoised/{root}_denoised.csv"  # Final CSV output
 
             # Convert CSV input to a SAM file.
             csv_to_sam(input_file, output_sam)
@@ -184,14 +190,47 @@ def main():
 
 
     elif args.command == 'analyse':
-        con_mat_pcr = confusion_matrix(denoised_file=args.pcr,
-                                       amplified=args.pcr_amplified,
-                                       true_umis_file=args.true_barcodes)
-        con_mat_polonies = confusion_matrix(denoised_file=args.polonies,
-                                            amplified=args.polonies_amplified,
-                                            true_umis_file=args.true_barcodes)
-        print(con_mat_pcr)
-        print(con_mat_polonies)
+        con_mat = confusion_matrix(denoised_file=args.denoised,
+                                    amplified=args.amplified,
+                                    true_umis_file=args.true_barcodes,
+                                    plot=args.plot)
+        # Write confusion matrix metrics to CSV file named after amplified file
+        amplified_file = args.amplified
+        # Extract the filename stem without directory or extension
+        file_stem = os.path.splitext(os.path.basename(amplified_file))[0]
+        params_stem = file_stem.replace('amplified', '')
+        metrics_stem = file_stem.replace('amplified', 'metrics')
+
+        # Determine amplification type and parse parameters
+        parts = params_stem.split('_')
+        print(parts)
+        extra_fields = {}
+        if parts[0] == 'pcr':
+            extra_fields['amplification_type'] = 'pcr'
+            mut_idx = parts.index('mut')
+            extra_fields['mutation_rate'] = parts[mut_idx + 1]
+            extra_fields['cycles'] = parts[mut_idx + 2]
+        elif parts[0] == 'polonies':
+            extra_fields['amplification_type'] = 'polonies'
+            for i in range(1, len(parts), 2):
+                if i + 1 < len(parts):
+                    extra_fields[parts[i]] = parts[i + 1]
+
+        # Combine metrics with parameters
+        row = {**con_mat, **extra_fields}
+        print(row)
+        print(extra_fields)
+
+        # Write header and row with dynamic fields
+        fieldnames = ["TP", "TN", "FP", "FN", "accuracy", "precision", "recall", "specificity"] + list(extra_fields.keys())
+        metrics_filename = 'results_metrics/' + metrics_stem + '_metrics.csv'
+        with open(metrics_filename, 'w', newline='') as mf:
+            writer = csv.DictWriter(mf, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(row)
+        logging.info(f"Confusion matrix metrics saved to {metrics_filename}")
+
+
 
 if __name__ == "__main__":
     # Optional: on Windows, call freeze_support() if needed:

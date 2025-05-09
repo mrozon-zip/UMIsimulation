@@ -3,8 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-
-def confusion_matrix(denoised_file, amplified, true_umis_file):
+def confusion_matrix(denoised_file, amplified, true_umis_file, plot):
     def load_file(file):
         with open(file, mode='r') as f:
             return {row['sequence'] for row in csv.DictReader(f)}
@@ -18,26 +17,39 @@ def confusion_matrix(denoised_file, amplified, true_umis_file):
     fp = len(sequences_denoised - sequences_true)
     tn = len(sequences_amplified - sequences_denoised - sequences_true)
 
-    cm = [[tp, fp], [fn, tn]]
+    # Calculate metrics
+    total = tp + tn + fp + fn
+    accuracy = (tp + tn) / total if total != 0 else 0
+    precision = tp / (tp + fp) if (tp + fp) != 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) != 0 else 0
+    specificity = tn / (tn + fp) if (tn + fp) != 0 else 0
 
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=["Actual Positives", "Actual Negatives"],
-                yticklabels=["Predicted Positives", "Predicted Negatives"])
-    plt.title("Confusion Matrix")
-    plt.xlabel("Actual")
-    plt.ylabel("Predicted")
+    if plot:
+        cm = [[tp, fp], [fn, tn]]
 
-    # Save the plot to a png file in the results1 folder with the same name as the amplified file
-    os.makedirs("results1", exist_ok=True)
-    base_name = os.path.basename(amplified)
-    plot_file = os.path.join("results1", os.path.splitext(base_name)[0] + ".png")
-    plt.savefig(plot_file)
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                    xticklabels=["Actual Positives", "Actual Negatives"],
+                    yticklabels=["Predicted Positives", "Predicted Negatives"])
+        plt.title("Confusion Matrix")
+        plt.xlabel("Actual")
+        plt.ylabel("Predicted")
 
-    plt.show()
+        # Save the plot to a png file in the results1 folder with the same name as the amplified file
+        os.makedirs("dump/results1", exist_ok=True)
+        base_name = os.path.basename(amplified)
+        plot_file = os.path.join("dump/results1", os.path.splitext(base_name)[0] + ".png")
+        plt.savefig(plot_file)
 
-    print(f"True Positives (TP): {tp}")
-    print(f"True Negatives (TN): {tn}")
-    print(f"False Positives (FP): {fp}")
-    print(f"False Negatives (FN): {fn}")
+        plt.show()
 
-    return {"TP": tp, "TN": tn, "FP": fp, "FN": fn}
+    return {
+        "TP": tp,
+        "TN": tn,
+        "FP": fp,
+        "FN": fn,
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "specificity": specificity
+    }
+

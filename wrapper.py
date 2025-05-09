@@ -1,6 +1,7 @@
 import csv
 import pysam
 
+csv.field_size_limit(30 * 1024 * 1024)
 
 def csv_to_sam(input, output):
     with open(input, "r") as csvfile, open(output, "w") as samfile:
