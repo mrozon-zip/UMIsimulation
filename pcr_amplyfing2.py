@@ -144,7 +144,7 @@ def pcr_pipeline(
         seed: int = None
 ) -> None:
     """
-    Full PCR simulation pipeline:
+    Full PCR_simulation pipeline:
       1. Generate initial sequences
       2. Amplify over cycles with PCR errors
       3. Trim/pad to original length

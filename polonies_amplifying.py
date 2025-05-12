@@ -210,7 +210,7 @@ def polonies_amplification(s_radius: float,
     for i in range(len(d_points)):
         d_points['id'][i] = available_ids.pop()
 
-    base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
+    base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
       # key: sequence, value: cumulative N0
     folder_name = f"{base_folder}results_amplified/helping_folder"
@@ -590,15 +590,19 @@ def polonies_amplification(s_radius: float,
             id_val = int(row["id"])
             born = int(row["born"])
             active = int(row["active"])
+            if row["parent_id"] == '':
+                row["parent_id"] = '0'
+            pid_val = int(row["parent_id"])
             if encoded_seq in dedup:
                 dedup[encoded_seq]["N0"] += n0
                 dedup[encoded_seq]["id"].append(id_val)
+                dedup[encoded_seq]["parent_id"].append(pid_val)
                 dedup[encoded_seq]["born"].append(int(born))
                 dedup[encoded_seq]["active"].append(active)
             else:
                 dedup[encoded_seq] = {"N0": n0,
                                       "id": [id_val],
-                                      "parent_id": row["parent_id"],
+                                      "parent_id": [pid_val],
                                       "x": row["x"],
                                       "y": row["y"],
                                       "born": [born],

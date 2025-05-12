@@ -10,9 +10,10 @@ from generate import generate_sequences
 from analysis import confusion_matrix
 from support import process_file
 from wrapper import csv_to_sam, bam_to_csv
+from experimental_denoiser import denoise_csv, build_sequence_network
 import os
 
-base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
 
 def main():
     parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
@@ -161,8 +162,8 @@ def main():
             root, _ = os.path.splitext(input_file_simple)
 
             # File names for intermediate and final outputs.
-            output_sam = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/results_denoised/helping_folder/{root}.sam"  # Used by csv_to_sam()
-            output_csv = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/results_denoised/{root}_denoised.csv"  # Final CSV output
+            output_sam = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/results_denoised/helping_folder/{root}.sam"  # Used by csv_to_sam()
+            output_csv = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/results_denoised/{root}_denoised.csv"  # Final CSV output
 
             # Convert CSV input to a SAM file.
             csv_to_sam(input_file, output_sam)
@@ -188,6 +189,10 @@ def main():
             bam_to_csv(input_bam, output_csv)
         elif args.type == 2:
             process_file(base_folder + args.input)
+        elif args.type == 3:
+            denoise_csv(args.input, max_edit_distance=10)
+            network, edit_hist, diff_list = build_sequence_network(args.input)
+            print(edit_hist)  # e.g., {0: 3, 1: 12, 2: 7, ...}
 
 
     elif args.command == 'analyse':

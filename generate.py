@@ -8,7 +8,7 @@ random.seed(42)
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
 
-base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
 
 def generate_sequences(num: int, length: int, unique: bool, output_filename: str) -> List[Dict[str, any]]:
     """

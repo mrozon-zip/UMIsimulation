@@ -4,7 +4,7 @@ import random
 from typing import List, Dict, Tuple, Any
 import os
 
-base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
 
 def pcr_amplification(sequences: List[Dict[str, Any]],
                       cycles: int,
