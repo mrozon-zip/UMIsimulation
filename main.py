@@ -12,6 +12,7 @@ from support import process_file
 from wrapper import csv_to_sam, bam_to_csv
 import os
 
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
 
 def main():
     parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
@@ -160,8 +161,8 @@ def main():
             root, _ = os.path.splitext(input_file_simple)
 
             # File names for intermediate and final outputs.
-            output_sam = f"results_denoised/helping_folder/{root}.sam"  # Used by csv_to_sam()
-            output_csv = f"results_denoised/{root}_denoised.csv"  # Final CSV output
+            output_sam = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/results_denoised/helping_folder/{root}.sam"  # Used by csv_to_sam()
+            output_csv = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/results_denoised/{root}_denoised.csv"  # Final CSV output
 
             # Convert CSV input to a SAM file.
             csv_to_sam(input_file, output_sam)
@@ -171,10 +172,10 @@ def main():
             # - The second line sorts the BAM file.
             # - The third line deduplicates the sorted BAM using umi_tools.
             bash_command = f"""
-            samtools view -S -b {output_sam} > {root}.bam
-            samtools sort {root}.bam -o sorted.bam
-            samtools index sorted.bam
-            umi_tools dedup -I sorted.bam -S deduped.bam --output-stats=deduplicated --extract-umi-method=tag --umi-tag=UB --method=directional
+            samtools view -S -b /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/results_denoised/helping_folder/{root}.sam > /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/{root}.bam
+            samtools sort /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/{root}.bam -o /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/sorted.bam
+            samtools index /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/sorted.bam
+            umi_tools dedup -I /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/sorted.bam -S /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/deduped.bam --output-stats=deduplicated --extract-umi-method=tag --umi-tag=UB --method=directional
             """
 
             # Run the bash command.
@@ -183,10 +184,10 @@ def main():
             subprocess.run(bash_command, shell=True, check=True)
 
             # Use the deduplicated BAM file as input for the CSV conversion.
-            input_bam = "deduped.bam"
+            input_bam = f"{base_folder}deduped.bam"
             bam_to_csv(input_bam, output_csv)
         elif args.type == 2:
-            process_file(args.input)
+            process_file(base_folder + args.input)
 
 
     elif args.command == 'analyse':

@@ -4,6 +4,7 @@ import random
 from typing import List, Dict, Tuple, Any
 import os
 
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
 
 def pcr_amplification(sequences: List[Dict[str, Any]],
                       cycles: int,
@@ -111,5 +112,5 @@ def pcr_amplification(sequences: List[Dict[str, Any]],
     sequences = list(collapsed.values())
 
     base, ext = os.path.splitext(output)
-    pcr_output = f"results_amplified/pcr_{base}{ext}"
+    pcr_output = f"{base_folder}results_amplified/pcr_{base}{ext}"
     return sequences, total_sequences_history, pcr_output

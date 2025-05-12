@@ -210,19 +210,20 @@ def polonies_amplification(s_radius: float,
     for i in range(len(d_points)):
         d_points['id'][i] = available_ids.pop()
 
+    base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
       # key: sequence, value: cumulative N0
-    folder_name = "results_amplified/helping_folder"
+    folder_name = f"{base_folder}results_amplified/helping_folder"
 
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
     # Define the folder where the supporting files will be saved
     base, ext = os.path.splitext(output)
-    helping_files = f"results_amplified/helping_folder/c_supporting_{base}"
-    orphan_file = f"results_amplified/helping_folder/orphan.csv"
+    helping_files = f"{base_folder}results_amplified/helping_folder/c_supporting_{base}"
+    orphan_file = f"{base_folder}results_amplified/helping_folder/orphan.csv"
     aoe_radius = s_radius * aoe_radius/100
     # Define the output file for concatenated results
-    output_file_path = f"results_amplified/helping_folder/cleared_sequences_{base}.csv"
+    output_file_path = f"{base_folder}results_amplified/helping_folder/cleared_sequences_{base}.csv"
 
     cycle_num = 0
     while True:
@@ -624,7 +625,7 @@ def polonies_amplification(s_radius: float,
             "active": data["active"]
         })
 
-    polonies_output = f"results_amplified/polonies_{base}{ext}"
+    polonies_output = f"{base_folder}results_amplified/polonies_{base}{ext}"
 
 
     return sequences_polony_amp, polonies_output

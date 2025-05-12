@@ -8,6 +8,7 @@ random.seed(42)
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
 
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/"
 
 def generate_sequences(num: int, length: int, unique: bool, output_filename: str) -> List[Dict[str, any]]:
     """
@@ -29,6 +30,8 @@ def generate_sequences(num: int, length: int, unique: bool, output_filename: str
         for _ in range(num):
             seq = ''.join(random.choices(NUCLEOTIDES, k=length))
             sequences.append({'sequence': seq, 'N0': 1})
+
+    output_filename = f"{base_folder}{output_filename}"
 
     with open(output_filename, 'w', newline='') as csvfile:
         fieldnames = ['sequence', 'N0']
