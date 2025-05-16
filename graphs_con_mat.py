@@ -14,9 +14,9 @@ COLOR_MAP = {
 }
 MARKER_MAP = {
     'accuracy': 'o',
-    'precision': 's',
-    'recall': 'x',
-    'specificity': '^'
+    'precision': 'o',
+    'recall': 'o',
+    'specificity': 'o'
 }
 
 def load_all_metrics(metrics_dir):

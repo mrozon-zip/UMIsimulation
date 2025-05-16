@@ -8,9 +8,8 @@ from pcr_amplifying import pcr_amplification
 import subprocess
 from generate import generate_sequences
 from analysis import confusion_matrix
-from support import process_file
+from support import denoise
 from wrapper import csv_to_sam, bam_to_csv
-from experimental_denoiser import denoise_csv, build_sequence_network
 import os
 
 base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
@@ -162,8 +161,8 @@ def main():
             root, _ = os.path.splitext(input_file_simple)
 
             # File names for intermediate and final outputs.
-            output_sam = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/results_denoised/helping_folder/{root}.sam"  # Used by csv_to_sam()
-            output_csv = f"/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/results_denoised/{root}_denoised.csv"  # Final CSV output
+            output_sam = f"{root}.sam"  # Used by csv_to_sam()
+            output_csv = f"{root}_denoised.csv"  # Final CSV output
 
             # Convert CSV input to a SAM file.
             csv_to_sam(input_file, output_sam)
@@ -173,10 +172,10 @@ def main():
             # - The second line sorts the BAM file.
             # - The third line deduplicates the sorted BAM using umi_tools.
             bash_command = f"""
-            samtools view -S -b /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/results_denoised/helping_folder/{root}.sam > /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/{root}.bam
-            samtools sort /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/{root}.bam -o /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/sorted.bam
-            samtools index /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/sorted.bam
-            umi_tools dedup -I /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/sorted.bam -S /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR\ simulation/deduped.bam --output-stats=deduplicated --extract-umi-method=tag --umi-tag=UB --method=directional
+            samtools view -S -b {root}.sam > {root}.bam
+            samtools sort {root}.bam -o sorted.bam
+            samtools index sorted.bam
+            umi_tools dedup -I sorted.bam -S deduped.bam --output-stats=deduplicated --extract-umi-method=tag --umi-tag=UB --method=directional
             """
 
             # Run the bash command.
@@ -188,11 +187,7 @@ def main():
             input_bam = f"{base_folder}deduped.bam"
             bam_to_csv(input_bam, output_csv)
         elif args.type == 2:
-            process_file(base_folder + args.input)
-        elif args.type == 3:
-            denoise_csv(args.input, max_edit_distance=10)
-            network, edit_hist, diff_list = build_sequence_network(args.input)
-            print(edit_hist)  # e.g., {0: 3, 1: 12, 2: 7, ...}
+            denoise(args.input, 2)
 
 
     elif args.command == 'analyse':

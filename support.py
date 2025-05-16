@@ -3,11 +3,112 @@ from typing import Dict, Tuple, List, Union
 import os
 import csv
 import random
+import pandas as pd
+from pathlib import Path
+import sys
+from Levenshtein import distance
 
 random.seed(42)
 
 # Global nucleotides list
 NUCLEOTIDES = ['A', 'C', 'G', 'T']
+
+
+def denoise(input_csv_path, treshold):
+    """
+    Reads a CSV, identifies 'central' nodes, and writes them to a new CSV.
+
+    A node X is considered 'central' if no other node Y exists such that:
+    1. count(Y) >= 2 * count(X)
+    2. levenshtein_distance(sequence(Y), sequence(X)) == 1
+
+    Args:
+        input_csv_path (str): Path to the input CSV file.
+        output_dir (str): Path to the directory where the output CSV will be saved.
+    """
+    try:
+        # Read the input CSV
+        df = pd.read_csv(input_csv_path)
+
+        # Validate required columns
+        if 'sequence' not in df.columns or 'N0' not in df.columns:
+            print(f"Error: Input CSV '{input_csv_path}' must contain 'sequence' and 'N0' columns.", file=sys.stderr)
+            return
+
+        # Ensure N0 is numeric, handle potential errors
+        try:
+            df['N0'] = pd.to_numeric(df['N0'])
+        except ValueError:
+            print(f"Error: Column 'N0' in '{input_csv_path}' contains non-numeric values.", file=sys.stderr)
+            return
+
+        # Convert to list of dictionaries for potentially faster access? Or use iloc/loc
+        # Using df.itertuples() is generally efficient
+        nodes = list(df.itertuples())
+
+        indices_to_keep = []
+
+        print(f"Processing {len(nodes)} nodes from {input_csv_path}...")
+
+        # Iterate through each node (X) to determine if it's 'central'
+        for i, node_x in enumerate(nodes):
+            is_potentially_erroneous = False
+            seq_x = node_x.sequence
+            count_x = node_x.N0
+
+            # Compare node X with every other node Y
+            for j, node_y in enumerate(nodes):
+                if i == j:  # Don't compare a node to itself
+                    continue
+
+                seq_y = node_y.sequence
+                count_y = node_y.N0
+
+                # Check the conditions for X being potentially erroneous due to Y
+                # Condition 1: Node Y count is significantly higher
+                count_condition = (count_y >= 2 * count_x)
+
+                # Condition 2: Sequences are 1 edit distance apart
+                # Only calculate distance if count condition is met (optimization)
+                if count_condition:
+                    edit_distance = distance(seq_y, seq_x)
+                    if edit_distance <= treshold:
+                        is_potentially_erroneous = True
+                        # print(f"Node {i} ('{seq_x}', {count_x}) is potentially erroneous due to Node {j} ('{seq_y}', {count_y})")
+                        break  # Found a node Y that makes X non-central, no need to check others
+
+            # If after checking all other nodes Y, no condition was met, keep node X
+            if not is_potentially_erroneous:
+                indices_to_keep.append(node_x.Index)  # Use the original DataFrame index
+
+        print(f"Identified {len(indices_to_keep)} central nodes.")
+
+        # Filter the original DataFrame
+        df_denoised = df.loc[indices_to_keep]
+
+        # --- Output File Path Handling ---
+        input_path_obj = Path(input_csv_path)
+        input_filename_stem = input_path_obj.stem  # Filename without extension
+        output_filename = f"{input_filename_stem}_denoised.csv"
+
+        output_path_obj = Path("results_denoised")
+        # Create the output directory if it doesn't exist
+        output_path_obj.mkdir(parents=True, exist_ok=True)
+
+        output_csv_path = output_path_obj / output_filename
+        # --- ---
+
+        # Write the denoised data to the output CSV
+        df_denoised.to_csv(output_csv_path, index=False)
+        print(f"Denoised data saved to: {output_csv_path}")
+
+    except FileNotFoundError:
+        print(f"Error: Input file not found at '{input_csv_path}'", file=sys.stderr)
+    except pd.errors.EmptyDataError:
+        print(f"Error: Input file '{input_csv_path}' is empty.", file=sys.stderr)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+
 
 def csv_to_list_of_dicts(filename):
     """
