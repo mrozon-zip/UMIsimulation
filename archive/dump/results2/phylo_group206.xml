@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<phyloxml xmlns="http://www.phyloxml.org"><phylogeny rooted="true"><name>An example</name><clade branch_length="1"><clade branch_length="1"><name>CTTCGTGGCACTGTGGTCGATGAAGGTATTCA,2</name></clade><clade branch_length="1"><clade branch_length="1"><name>CTCGTGGCACTGTGGTCGATGAAGGTATTCA,2</name></clade><clade branch_length="1"><clade branch_length="1"><name>CTCGTGGAACTGTGGTCGATGAAGGTATTCA,2</name></clade></clade></clade></clade></phylogeny></phyloxml>

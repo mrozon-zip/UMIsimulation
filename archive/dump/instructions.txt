@@ -1,0 +1,30 @@
+generate
+num, 100
+len, 30
+unique, None
+output, true_barcodes.csv
+
+amplify_pcr
+method, pcr
+cycles, 30
+mutation_rate, 0.001
+substitution_prob, None
+deletion_prob, None
+insertion_prob, None
+substrate_capacity, None
+S, None
+C, None
+
+amplify_polonies
+method, polonies_amplification
+mutation_rate, 0.001
+substitution_prob, None
+deletion_prob, None
+insertion_prob, None
+S_radius, 3
+AOE_radius, 10
+denisty, 100
+deviation, 0.05
+success_prob, 0.85
+simulate, False
+no_simulate, True

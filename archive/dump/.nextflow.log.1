@@ -1,0 +1,79 @@
+kwi-09 15:07:11.946 [main] DEBUG nextflow.cli.Launcher - $> nextflow run hello
+kwi-09 15:07:11.988 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 24.10.5
+kwi-09 15:07:12.020 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/Users/krzysztofmrozik/.nextflow/plugins; core-plugins: nf-amazon@2.9.2,nf-azure@1.10.2,nf-cloudcache@0.4.2,nf-codecommit@0.2.2,nf-console@1.1.4,nf-google@1.15.4,nf-tower@1.9.3,nf-wave@1.7.4
+kwi-09 15:07:12.034 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+kwi-09 15:07:12.034 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+kwi-09 15:07:12.036 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+kwi-09 15:07:12.044 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+kwi-09 15:07:12.053 [main] DEBUG nextflow.scm.ProviderConfig - Using SCM config path: /Users/krzysztofmrozik/.nextflow/scm
+kwi-09 15:07:12.058 [main] DEBUG nextflow.scm.AssetManager - Listing projects in folder: /Users/krzysztofmrozik/.nextflow/assets
+kwi-09 15:07:12.074 [main] DEBUG nextflow.scm.RepositoryFactory - Found Git repository result: [RepositoryFactory]
+kwi-09 15:07:12.079 [main] INFO  nextflow.cli.CmdRun - Pulling nextflow-io/hello ...
+kwi-09 15:07:12.081 [main] DEBUG nextflow.scm.RepositoryProvider - Request [credentials -:-] -> https://api.github.com/repos/nextflow-io/hello/contents/nextflow.config
+kwi-09 15:07:12.730 [main] DEBUG nextflow.scm.RepositoryProvider - Request [credentials -:-] -> https://api.github.com/repos/nextflow-io/hello/contents/main.nf
+kwi-09 15:07:12.888 [main] DEBUG nextflow.scm.RepositoryProvider - Request [credentials -:-] -> https://api.github.com/repos/nextflow-io/hello
+kwi-09 15:07:13.134 [main] DEBUG nextflow.scm.AssetManager - Pulling nextflow-io/hello -- Using remote clone url: https://github.com/nextflow-io/hello.git
+kwi-09 15:07:17.981 [main] INFO  nextflow.cli.CmdRun -  downloaded from https://github.com/nextflow-io/hello.git
+kwi-09 15:07:17.993 [main] DEBUG nextflow.config.ConfigBuilder - Found config base: /Users/krzysztofmrozik/.nextflow/assets/nextflow-io/hello/nextflow.config
+kwi-09 15:07:17.995 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /Users/krzysztofmrozik/.nextflow/assets/nextflow-io/hello/nextflow.config
+kwi-09 15:07:18.002 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /Users/krzysztofmrozik/.nextflow/secrets/store.json
+kwi-09 15:07:18.004 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@6c4ce583] - activable => nextflow.secret.LocalSecretsProvider@6c4ce583
+kwi-09 15:07:18.007 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
+kwi-09 15:07:18.032 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 by global default
+kwi-09 15:07:18.033 [main] DEBUG nextflow.cli.CmdRun - Launching `https://github.com/nextflow-io/hello` [desperate_lamarr] DSL2 - revision: afff16a9b4 [master]
+kwi-09 15:07:18.034 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+kwi-09 15:07:18.034 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+kwi-09 15:07:18.072 [main] DEBUG nextflow.Session - Session UUID: 2bcf9bbb-edff-4f5b-8f45-c1e26109c57d
+kwi-09 15:07:18.072 [main] DEBUG nextflow.Session - Run name: desperate_lamarr
+kwi-09 15:07:18.072 [main] DEBUG nextflow.Session - Executor pool size: 8
+kwi-09 15:07:18.079 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+kwi-09 15:07:18.082 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=24; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+kwi-09 15:07:18.121 [main] DEBUG nextflow.cli.CmdRun - 
+  Version: 24.10.5 build 5935
+  Created: 04-03-2025 17:55 UTC (18:55 CEST)
+  System: Mac OS X 15.4
+  Runtime: Groovy 4.0.23 on OpenJDK 64-Bit Server VM 11.0.23+9-LTS
+  Encoding: UTF-8 (UTF-8)
+  Process: 33104@MacBookAir [192.168.50.226]
+  CPUs: 8 - Mem: 16 GB (77.6 MB) - Swap: 1 GB (941.2 MB)
+kwi-09 15:07:18.130 [main] DEBUG nextflow.Session - Work-dir: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/work [Mac OS X]
+kwi-09 15:07:18.131 [main] DEBUG nextflow.Session - Script base path does not exist or is not a directory: /Users/krzysztofmrozik/.nextflow/assets/nextflow-io/hello/bin
+kwi-09 15:07:18.140 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+kwi-09 15:07:18.147 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
+kwi-09 15:07:18.168 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+kwi-09 15:07:18.174 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 9; maxThreads: 1000
+kwi-09 15:07:18.211 [main] DEBUG nextflow.Session - Session start
+kwi-09 15:07:18.300 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+kwi-09 15:07:18.359 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: null
+kwi-09 15:07:18.359 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+kwi-09 15:07:18.363 [main] DEBUG nextflow.executor.Executor - [warm up] executor > local
+kwi-09 15:07:18.366 [main] DEBUG n.processor.LocalPollingMonitor - Creating local task monitor for executor 'local' > cpus=8; memory=16 GB; capacity=8; pollInterval=100ms; dumpInterval=5m
+kwi-09 15:07:18.368 [main] DEBUG n.processor.TaskPollingMonitor - >>> barrier register (monitor: local)
+kwi-09 15:07:18.418 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: sayHello
+kwi-09 15:07:18.418 [main] DEBUG nextflow.Session - Igniting dataflow network (2)
+kwi-09 15:07:18.419 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > sayHello
+kwi-09 15:07:18.420 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_45e06ae60646ee81: /Users/krzysztofmrozik/.nextflow/assets/nextflow-io/hello/main.nf
+kwi-09 15:07:18.420 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+kwi-09 15:07:18.421 [main] DEBUG nextflow.Session - Session await
+kwi-09 15:07:18.519 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+kwi-09 15:07:18.521 [Task submitter] INFO  nextflow.Session - [bc/7fff44] Submitted process > sayHello (1)
+kwi-09 15:07:18.524 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+kwi-09 15:07:18.525 [Task submitter] INFO  nextflow.Session - [e3/48ac11] Submitted process > sayHello (3)
+kwi-09 15:07:18.528 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+kwi-09 15:07:18.529 [Task submitter] INFO  nextflow.Session - [91/159c48] Submitted process > sayHello (2)
+kwi-09 15:07:18.534 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+kwi-09 15:07:18.534 [Task submitter] INFO  nextflow.Session - [d6/049378] Submitted process > sayHello (4)
+kwi-09 15:07:18.547 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 1; name: sayHello (1); status: COMPLETED; exit: 0; error: -; workDir: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/work/bc/7fff44a2524e00350b12707a13a912]
+kwi-09 15:07:18.547 [Task monitor] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'TaskFinalizer' minSize=10; maxSize=24; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+kwi-09 15:07:18.549 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 3; name: sayHello (3); status: COMPLETED; exit: 0; error: -; workDir: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/work/e3/48ac117ea427b6a20a3b7e45fb719b]
+kwi-09 15:07:18.550 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 2; name: sayHello (2); status: COMPLETED; exit: 0; error: -; workDir: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/work/91/159c48886e326291ce73f93b8bcf20]
+kwi-09 15:07:18.551 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 4; name: sayHello (4); status: COMPLETED; exit: 0; error: -; workDir: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/work/d6/0493789c2b7d2176aa64a6204a0377]
+kwi-09 15:07:18.557 [main] DEBUG nextflow.Session - Session await > all processes finished
+kwi-09 15:07:18.647 [Task monitor] DEBUG n.processor.TaskPollingMonitor - <<< barrier arrives (monitor: local) - terminating tasks monitor poll loop
+kwi-09 15:07:18.647 [main] DEBUG nextflow.Session - Session await > all barriers passed
+kwi-09 15:07:18.649 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'TaskFinalizer' shutdown completed (hard=false)
+kwi-09 15:07:18.653 [main] DEBUG n.trace.WorkflowStatsObserver - Workflow completed > WorkflowStats[succeededCount=4; failedCount=0; ignoredCount=0; cachedCount=0; pendingCount=0; submittedCount=0; runningCount=0; retriesCount=0; abortedCount=0; succeedDuration=3ms; failedDuration=0ms; cachedDuration=0ms;loadCpus=0; loadMemory=0; peakRunning=4; peakCpus=4; peakMemory=0; ]
+kwi-09 15:07:18.666 [main] DEBUG nextflow.cache.CacheDB - Closing CacheDB done
+kwi-09 15:07:18.674 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'FileTransfer' shutdown completed (hard=false)
+kwi-09 15:07:18.674 [main] DEBUG nextflow.script.ScriptRunner - > Execution complete -- Goodbye

@@ -1,0 +1,137 @@
+kwi-09 15:07:34.579 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf
+kwi-09 15:07:34.636 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 24.10.5
+kwi-09 15:07:34.653 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/Users/krzysztofmrozik/.nextflow/plugins; core-plugins: nf-amazon@2.9.2,nf-azure@1.10.2,nf-cloudcache@0.4.2,nf-codecommit@0.2.2,nf-console@1.1.4,nf-google@1.15.4,nf-tower@1.9.3,nf-wave@1.7.4
+kwi-09 15:07:34.666 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+kwi-09 15:07:34.666 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+kwi-09 15:07:34.668 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+kwi-09 15:07:34.676 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+kwi-09 15:07:34.715 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 from script declaration
+kwi-09 15:07:34.730 [main] DEBUG nextflow.cli.CmdRun - Launching `main.nf` [nostalgic_jones] DSL2 - revision: f06bfa3cbf
+kwi-09 15:07:34.731 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+kwi-09 15:07:34.731 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+kwi-09 15:07:34.771 [main] DEBUG nextflow.Session - Session UUID: d91a92c9-24d1-4723-b9c6-d830bf09fe5e
+kwi-09 15:07:34.771 [main] DEBUG nextflow.Session - Run name: nostalgic_jones
+kwi-09 15:07:34.772 [main] DEBUG nextflow.Session - Executor pool size: 8
+kwi-09 15:07:34.778 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+kwi-09 15:07:34.782 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=24; workQueue=LinkedBlockingQueue[-1]; allowCoreThreadTimeout=false
+kwi-09 15:07:34.815 [main] DEBUG nextflow.cli.CmdRun - 
+  Version: 24.10.5 build 5935
+  Created: 04-03-2025 17:55 UTC (18:55 CEST)
+  System: Mac OS X 15.4
+  Runtime: Groovy 4.0.23 on OpenJDK 64-Bit Server VM 11.0.23+9-LTS
+  Encoding: UTF-8 (UTF-8)
+  Process: 33191@MacBookAir [192.168.50.226]
+  CPUs: 8 - Mem: 16 GB (301.5 MB) - Swap: 1 GB (941.2 MB)
+kwi-09 15:07:34.825 [main] DEBUG nextflow.Session - Work-dir: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/work [Mac OS X]
+kwi-09 15:07:34.826 [main] DEBUG nextflow.Session - Script base path does not exist or is not a directory: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/bin
+kwi-09 15:07:34.836 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+kwi-09 15:07:34.844 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
+kwi-09 15:07:34.864 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+kwi-09 15:07:34.871 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 9; maxThreads: 1000
+kwi-09 15:07:34.912 [main] DEBUG nextflow.Session - Session start
+kwi-09 15:07:35.517 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+kwi-09 15:07:35.529 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /Users/krzysztofmrozik/.nextflow/secrets/store.json
+kwi-09 15:07:35.534 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@4438938e] - activable => nextflow.secret.LocalSecretsProvider@4438938e
+kwi-09 15:07:35.540 [main] WARN  nextflow.script.ScriptBinding - Access to undefined parameter `instructions` -- Initialise it to a default value eg. `params.instructions = some_value`
+kwi-09 15:07:35.540 [main] WARN  nextflow.script.ScriptBinding - Access to undefined parameter `input_csv` -- Initialise it to a default value eg. `params.input_csv = some_value`
+kwi-09 15:07:35.554 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_fbb63665fad67e6d: /Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR simulation/main.nf
+kwi-09 15:07:35.554 [main] DEBUG nextflow.Session - Session aborted -- Cause: Channel `create` method is not supported any more
+kwi-09 15:07:35.559 [main] DEBUG nextflow.Session - 
+Thread[Finalizer,8,system]
+  java.base@11.0.23/java.lang.Object.wait(Native Method)
+  java.base@11.0.23/java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:155)
+  java.base@11.0.23/java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:176)
+  java.base@11.0.23/java.lang.ref.Finalizer$FinalizerThread.run(Finalizer.java:170)
+
+Thread[Common-Cleaner,8,InnocuousThreadGroup]
+  java.base@11.0.23/java.lang.Object.wait(Native Method)
+  java.base@11.0.23/java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:155)
+  java.base@11.0.23/jdk.internal.ref.CleanerImpl.run(CleanerImpl.java:148)
+  java.base@11.0.23/java.lang.Thread.run(Thread.java:829)
+  java.base@11.0.23/jdk.internal.misc.InnocuousThread.run(InnocuousThread.java:161)
+
+Thread[Thread-1,5,main]
+  java.base@11.0.23/jdk.internal.misc.Unsafe.park(Native Method)
+  java.base@11.0.23/java.util.concurrent.locks.LockSupport.parkNanos(LockSupport.java:234)
+  java.base@11.0.23/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.awaitNanos(AbstractQueuedSynchronizer.java:2123)
+  java.base@11.0.23/java.util.concurrent.LinkedBlockingDeque.pollFirst(LinkedBlockingDeque.java:513)
+  java.base@11.0.23/java.util.concurrent.LinkedBlockingDeque.poll(LinkedBlockingDeque.java:675)
+  app//nextflow.util.SimpleAgent.run(SimpleAgent.groovy:89)
+  java.base@11.0.23/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+  java.base@11.0.23/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+  java.base@11.0.23/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+  java.base@11.0.23/java.lang.reflect.Method.invoke(Method.java:566)
+  app//org.codehaus.groovy.reflection.CachedMethod.invoke(CachedMethod.java:343)
+  app//groovy.lang.MetaMethod.doMethodInvoke(MetaMethod.java:328)
+  app//groovy.lang.MetaClassImpl.doInvokeMethod(MetaClassImpl.java:1333)
+  app//groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1088)
+  app//groovy.lang.MetaClassImpl.invokeMethodClosure(MetaClassImpl.java:1017)
+  app//groovy.lang.MetaClassImpl.doInvokeMethod(MetaClassImpl.java:1207)
+  app//groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1088)
+  app//groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1007)
+  app//groovy.lang.Closure.call(Closure.java:433)
+  app//groovy.lang.Closure.call(Closure.java:412)
+  app//groovy.lang.Closure.run(Closure.java:505)
+  java.base@11.0.23/java.lang.Thread.run(Thread.java:829)
+
+Thread[AnsiLogObserver,5,main]
+  java.base@11.0.23/java.lang.Object.wait(Native Method)
+  app//nextflow.trace.AnsiLogObserver.render0(AnsiLogObserver.groovy:185)
+  java.base@11.0.23/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+  java.base@11.0.23/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+  java.base@11.0.23/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+  java.base@11.0.23/java.lang.reflect.Method.invoke(Method.java:566)
+  app//org.codehaus.groovy.reflection.CachedMethod.invoke(CachedMethod.java:343)
+  app//groovy.lang.MetaMethod.doMethodInvoke(MetaMethod.java:328)
+  app//groovy.lang.MetaClassImpl.doInvokeMethod(MetaClassImpl.java:1333)
+  app//groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1088)
+  app//groovy.lang.MetaClassImpl.invokeMethodClosure(MetaClassImpl.java:1017)
+  app//groovy.lang.MetaClassImpl.doInvokeMethod(MetaClassImpl.java:1207)
+  app//groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1088)
+  app//groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1007)
+  app//groovy.lang.Closure.call(Closure.java:433)
+  app//groovy.lang.Closure.call(Closure.java:412)
+  app//groovy.lang.Closure.run(Closure.java:505)
+  java.base@11.0.23/java.lang.Thread.run(Thread.java:829)
+
+Thread[main,5,main]
+  java.base@11.0.23/java.lang.Thread.dumpThreads(Native Method)
+  java.base@11.0.23/java.lang.Thread.getAllStackTraces(Thread.java:1653)
+  app//nextflow.util.SysHelper.dumpThreads(SysHelper.groovy:188)
+  app//nextflow.Session.abort(Session.groovy:800)
+  app//nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:149)
+  app//nextflow.cli.CmdRun.run(CmdRun.groovy:376)
+  app//nextflow.cli.Launcher.run(Launcher.groovy:503)
+  app//nextflow.cli.Launcher.main(Launcher.groovy:658)
+
+Thread[Reference Handler,10,system]
+  java.base@11.0.23/java.lang.ref.Reference.waitForReferencePendingList(Native Method)
+  java.base@11.0.23/java.lang.ref.Reference.processPendingReferences(Reference.java:241)
+  java.base@11.0.23/java.lang.ref.Reference$ReferenceHandler.run(Reference.java:213)
+
+Thread[Signal Dispatcher,9,system]
+
+kwi-09 15:07:35.564 [main] ERROR nextflow.cli.Launcher - @unknown
+groovy.lang.DeprecationException: Channel `create` method is not supported any more
+	at nextflow.Channel.create(Channel.groovy:120)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+	at org.codehaus.groovy.reflection.CachedMethod.invoke(CachedMethod.java:343)
+	at groovy.lang.MetaMethod.doMethodInvoke(MetaMethod.java:328)
+	at groovy.lang.MetaClassImpl.invokeStaticMethod(MetaClassImpl.java:1586)
+	at groovy.lang.DelegatingMetaClass.invokeStaticMethod(DelegatingMetaClass.java:173)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at Script_fbb63665fad67e6d.runScript(Script_fbb63665fad67e6d:68)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.script.BaseScript.run0(BaseScript.groovy:159)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.script.BaseScript.run(BaseScript.groovy:209)
+	at nextflow.script.ScriptParser.runScript(ScriptParser.groovy:236)
+	at nextflow.script.ScriptRunner.run(ScriptRunner.groovy:243)
+	at nextflow.script.ScriptRunner.execute(ScriptRunner.groovy:138)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:376)
+	at nextflow.cli.Launcher.run(Launcher.groovy:503)
+	at nextflow.cli.Launcher.main(Launcher.groovy:658)

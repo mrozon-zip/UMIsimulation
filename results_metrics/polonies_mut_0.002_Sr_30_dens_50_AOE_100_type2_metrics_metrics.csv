@@ -1,0 +1,2 @@
+TP,TN,FP,FN,accuracy,precision,recall,specificity,amplification_type,mut,Sr,dens,AOE
+30,5117,2,0,0.999611575063119,0.9375,1.0,0.9996092986911506,polonies,0.002,30,50,100

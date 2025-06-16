@@ -1,0 +1,2 @@
+TP,TN,FP,FN,accuracy,precision,recall,specificity,amplification_type,mutation_rate,cycles
+29,38051,25988,1,0.5943592064805132,0.0011146558019756313,0.9666666666666667,0.5941847936413748,pcr,0.01,25
