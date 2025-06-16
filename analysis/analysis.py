@@ -24,7 +24,7 @@ def confusion_matrix(denoised_file, amplified, true_umis_file, plot):
     recall = tp / (tp + fn) if (tp + fn) != 0 else 0
     specificity = tn / (tn + fp) if (tn + fp) != 0 else 0
 
-    if plot:
+    if plot == True:
         cm = [[tp, fp], [fn, tn]]
 
         sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
@@ -35,9 +35,9 @@ def confusion_matrix(denoised_file, amplified, true_umis_file, plot):
         plt.ylabel("Predicted")
 
         # Save the plot to a png file in the results1 folder with the same name as the amplified file
-        os.makedirs("dump/results1", exist_ok=True)
+        os.makedirs("../archive/dump/results1", exist_ok=True)
         base_name = os.path.basename(amplified)
-        plot_file = os.path.join("dump/results1", os.path.splitext(base_name)[0] + ".png")
+        plot_file = os.path.join("../archive/dump/results1", os.path.splitext(base_name)[0] + ".png")
         plt.savefig(plot_file)
 
         plt.show()

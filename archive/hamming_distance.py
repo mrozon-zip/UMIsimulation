@@ -6,6 +6,10 @@ import random
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+"""
+A hamming distance distribution graph constructor. Produces a PDF file with hamming distances in selected files. Not 
+used in a final version.
+"""
 
 def read_csv_file(filepath, sample_size, min_rows):
     """

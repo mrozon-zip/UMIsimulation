@@ -89,7 +89,7 @@ def denoise(input_csv_path, treshold):
         # --- Output File Path Handling ---
         input_path_obj = Path(input_csv_path)
         input_filename_stem = input_path_obj.stem  # Filename without extension
-        output_filename = f"{input_filename_stem}_denoised.csv"
+        output_filename = f"{input_filename_stem}_type2_denoised.csv"
 
         output_path_obj = Path("results_denoised")
         # Create the output directory if it doesn't exist

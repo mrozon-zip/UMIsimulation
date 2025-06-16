@@ -7,7 +7,7 @@ import sys
 
 random.seed(42)
 
-base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
+base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/" # For I/O calibration purposes
 
 class Denoiser:
     def __init__(self, input_csv: str):

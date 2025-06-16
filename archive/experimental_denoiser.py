@@ -5,6 +5,8 @@ import pandas as pd
 from pathlib import Path
 from collections import defaultdict, deque
 
+csv.field_size_limit(30 * 1024 * 1024)
+
 # Default maximum edit distance for connections
 DEFAULT_MAX_ED = 10
 
@@ -258,7 +260,24 @@ def build_sequence_network(csv_file_path):
     return network, edit_distance_hist, edit_distances
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python network_selector.py <input.csv> <output.csv>")
+    import glob
+    from collections import Counter
+
+    hist_total = Counter()
+    # Find all files in results_amplidied with "pcr" in filename
+    files = glob.glob("../results_amplified/polonies_mut_0.01_Sr_30_dens_100_AOE_10.csv")
+    if not files:
+        print("No files with 'pcr' in filename found in results_amplidied.")
         sys.exit(1)
-    build_network_and_select(sys.argv[1], sys.argv[2])
+    for f in files:
+        print(f"Processing {f}...")
+        _, hist, _ = build_sequence_network(f)
+        hist_total.update(hist)
+    # Save the total histogram to a CSV file
+    out_csv = "total_edit_distance_hist2.csv"
+    with open(out_csv, "w", newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["levenshtein_distance", "count"])
+        for dist in sorted(hist_total):
+            writer.writerow([dist, hist_total[dist]])
+    print(f"Saved accumulated edit distance histogram to {out_csv}")

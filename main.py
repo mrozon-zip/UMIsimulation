@@ -5,14 +5,12 @@ import matplotlib.pyplot as plt
 import math
 from polonies_amplifying import polonies_amplification
 from pcr_amplifying import pcr_amplification
-import subprocess
 from generate import generate_sequences
-from analysis import confusion_matrix
+from analysis.analysis import confusion_matrix
 from support import denoise
-from wrapper import csv_to_sam, bam_to_csv
 import os
 
-base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
+base_folder = "./"  # To calibrate I/O filepaths
 
 def main():
     parser = argparse.ArgumentParser(description="DNA Amplification Simulation Tool")
@@ -23,6 +21,8 @@ def main():
     generate_parser.add_argument('--num', type=int, required=True, help="Number of sequences to generate")
     generate_parser.add_argument('--length', type=int, required=True, help="Length of each sequence")
     generate_parser.add_argument('--unique', action='store_true', help="Ensure sequences are unique")
+    # Rest of the code assumes that output here is true_barcodes.csv, it shouldn't be something that user changes, since
+    # later it can cause some problems
     generate_parser.add_argument('--output', type=str, default='true_barcodes.csv', help="Output CSV filename")
 
     # Subcommand: amplify
@@ -30,33 +30,39 @@ def main():
     amplify_parser.add_argument('--method', type=str, choices=['pcr', 'bridge', 'polonies_amplification', 'both_12',
                                                                'both_13'], required=True,
                                 help="Amplification method to use")
+    # For PCR only
     amplify_parser.add_argument('--cycles', type=int, default=30, help="Number of amplification cycles")
+    amplify_parser.add_argument('--substrate_capacity', type=int, default=(2 ** 18),
+                                help="Initial substrate capacity")
+    amplify_parser.add_argument('--S', type=int, default=9_000_000, help="Threshold S parameter")
+    amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
+
+    # For both
     amplify_parser.add_argument('--mutation_rate', type=float, default=0.01,
                                 help="Mutation rate per nucleotide per replication event")
     amplify_parser.add_argument('--substitution_prob', type=float, default=0.4,
                                 help="Probability of substitution mutation")
     amplify_parser.add_argument('--deletion_prob', type=float, default=0.3, help="Probability of deletion mutation")
     amplify_parser.add_argument('--insertion_prob', type=float, default=0.3, help="Probability of insertion mutation")
-    amplify_parser.add_argument('--substrate_capacity', type=int, default=(2 ** 18),
-                                help="Initial substrate capacity")
-    amplify_parser.add_argument('--S', type=int, default=9_000_000, help="Threshold S parameter")
-    amplify_parser.add_argument('--C', type=float, default=1e-9, help="Sharpness parameter C")
     amplify_parser.add_argument('--input', type=str, default='true_barcodes.csv',
                                 help="Input CSV filename with true barcodes")
     amplify_parser.add_argument('--plot', dest='plot', action='store_true', help="Enable plotting (default)",
                                 default=True)
+    # Output here means what is added to the filename at the end
     amplify_parser.add_argument('--output', type=str, default='amplified.csv')
+    # It might be useless actually
     amplify_parser.add_argument('--no_plot', dest='plot', action='store_false', help="Disable plotting")
 
     # Bridge amplification specific parsers:
     amplify_parser.add_argument('--S_radius', type=float, default=10,
                                 help="Radius of S area where points are generated")
     amplify_parser.add_argument('--AOE_radius', type=float, default=10, help="Radius of AOE of every active A point")
-    amplify_parser.add_argument('--simulate', action='store_true', dest='simulate', help="Simulate amplification")
-    amplify_parser.add_argument('--no_simulate', action='store_false', dest='simulate', help="Do not simulate amplification")
     amplify_parser.add_argument('--density', type=float, default=10, help="Density parameter for Bridge amplification")
     amplify_parser.add_argument('--success_prob', type=float, default=0.85,
                                 help="Success probability for Bridge amplification")
+    # These are not used but they are expected when run (either simulate or nosimulate):
+    amplify_parser.add_argument('--simulate', action='store_true', dest='simulate', help="Simulate amplification")
+    amplify_parser.add_argument('--no_simulate', action='store_false', dest='simulate', help="Do not simulate amplification")
     amplify_parser.add_argument('--deviation', type=float, default=0.1,
                                 help="Deviation for Bridge amplification parameters (e.g., 0.1 for 10%)")
 
@@ -64,6 +70,7 @@ def main():
     denoise_parser = subparsers.add_parser('denoise', help="Denoise amplified sequences")
     denoise_parser.add_argument('--input', type=str, required=True, help="Input CSV filename for denoising")
     denoise_parser.add_argument('--type', type=int, required=True, help="type of denoising")
+    denoise_parser.add_argument('--treshold', type=int, default=2, required=True, help="trshold for connections")
     #denoise_parser.add_argument('--output', type=str, default='denoised.csv',
     #                            help="Output CSV filename for denoised sequences")
 
@@ -152,55 +159,23 @@ def main():
             # (Plotting code as before)
             plt.show()
 
-    # Suppose this is part of your command handling
     if args.command == 'denoise':
-
-        if args.type == 1:
-            input_file = args.input
-            input_file_simple = os.path.basename(args.input)
-            root, _ = os.path.splitext(input_file_simple)
-
-            # File names for intermediate and final outputs.
-            output_sam = f"{root}.sam"  # Used by csv_to_sam()
-            output_csv = f"{root}_denoised.csv"  # Final CSV output
-
-            # Convert CSV input to a SAM file.
-            csv_to_sam(input_file, output_sam)
-
-            # Create a multi-line bash command string.
-            # - The first line converts SAM to BAM using samtools.
-            # - The second line sorts the BAM file.
-            # - The third line deduplicates the sorted BAM using umi_tools.
-            bash_command = f"""
-            samtools view -S -b {root}.sam > {root}.bam
-            samtools sort {root}.bam -o sorted.bam
-            samtools index sorted.bam
-            umi_tools dedup -I sorted.bam -S deduped.bam --output-stats=deduplicated --extract-umi-method=tag --umi-tag=UB --method=directional
-            """
-
-            # Run the bash command.
-            # Using shell=True allows you to run a multi-line command.
-            # check=True will raise an error if any command fails.
-            subprocess.run(bash_command, shell=True, check=True)
-
-            # Use the deduplicated BAM file as input for the CSV conversion.
-            input_bam = f"{base_folder}deduped.bam"
-            bam_to_csv(input_bam, output_csv)
-        elif args.type == 2:
-            denoise(args.input, 2)
-
+        denoise(args.input, args.treshold)
 
     elif args.command == 'analyse':
         con_mat = confusion_matrix(denoised_file=args.denoised,
                                     amplified=args.amplified,
                                     true_umis_file=args.true_barcodes,
-                                    plot=args.plot)
+                                    plot=False)
         # Write confusion matrix metrics to CSV file named after amplified file
         amplified_file = args.amplified
+        denoised_file = args.denoised
         # Extract the filename stem without directory or extension
         file_stem = os.path.splitext(os.path.basename(amplified_file))[0]
+        file_stem1 = os.path.splitext(os.path.basename(denoised_file))[0]
         params_stem = file_stem.replace('amplified', '')
         metrics_stem = file_stem.replace('amplified', 'metrics')
+        metrics_stem1 = file_stem1.replace('denoised', 'metrics')
 
         # Determine amplification type and parse parameters
         parts = params_stem.split('_')
@@ -224,7 +199,7 @@ def main():
 
         # Write header and row with dynamic fields
         fieldnames = ["TP", "TN", "FP", "FN", "accuracy", "precision", "recall", "specificity"] + list(extra_fields.keys())
-        metrics_filename = 'results_metrics/' + metrics_stem + '_metrics.csv'
+        metrics_filename = 'results_metrics/' + metrics_stem1 + '_metrics.csv'
         with open(metrics_filename, 'w', newline='') as mf:
             writer = csv.DictWriter(mf, fieldnames=fieldnames)
             writer.writeheader()
@@ -232,9 +207,5 @@ def main():
         logging.info(f"Confusion matrix metrics saved to {metrics_filename}")
 
 
-
 if __name__ == "__main__":
-    # Optional: on Windows, call freeze_support() if needed:
-    # from multiprocessing import freeze_support
-    # freeze_support()
     main()

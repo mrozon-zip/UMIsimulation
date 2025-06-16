@@ -210,7 +210,7 @@ def polonies_amplification(s_radius: float,
     for i in range(len(d_points)):
         d_points['id'][i] = available_ids.pop()
 
-    base_folder = "/Users/krzysztofmrozik/Desktop/SciLifeLab/Projects/PCR_simulation/"
+    base_folder = "./"
     # Dictionary to collect sequences from a points that are removed (cleared from memory).
       # key: sequence, value: cumulative N0
     folder_name = f"{base_folder}results_amplified/helping_folder"
@@ -555,7 +555,7 @@ def polonies_amplification(s_radius: float,
                     "parent_id": new_point["parent_id"],
                     "x": new_point["x"],
                     "y": new_point["y"],
-                    "born": new_point["active"],
+                    "born": new_point["born"],
                     "active": new_point["active"]
                 })
     # Append the orphan rows to the existing data

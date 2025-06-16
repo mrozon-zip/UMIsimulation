@@ -2,6 +2,9 @@ import csv
 import ast
 import matplotlib.pyplot as plt
 
+"""
+A part of analysis module script. It generates a branching analysis presented in thesis.
+"""
 
 def load_csv_as_dicts(file_path):
     """
@@ -84,7 +87,7 @@ def plot_distribution(data):
 # Example usage:
 if __name__ == "__main__":
     # Replace 'input.csv' with the path to your CSV file.
-    file_path = 'dump/results1/polonies_amplified.csv'
+    file_path = '../archive/dump/results1/polonies_amplified.csv'
     data = load_csv_as_dicts(file_path)
 
     # Generate the distribution graph.

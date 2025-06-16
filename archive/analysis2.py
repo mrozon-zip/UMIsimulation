@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import os
 import csv
 import re
@@ -6,6 +7,10 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.lines import Line2D
 
+"""
+This is old analysis file that produces a PDF with confusion matrices for all amplification and denoising results. Not
+used in a final version.
+"""
 
 # ----------------------------
 # Helper functions
@@ -91,10 +96,10 @@ def process_file(file_path, true_seqs):
 # Main processing and plotting
 # ----------------------------
 def main():
-    true_barcodes_file = "true_barcodes.csv"
+    true_barcodes_file = "dump/true_barcodes.csv"
     results_folder = "results1"
     summary_csv = "barcode_counts_summary.csv"
-    pdf_filename = "barcode_plots.pdf"
+    pdf_filename = "dump/barcode_plots.pdf"
 
     # Load true barcode sequences.
     true_seqs = load_true_barcodes(true_barcodes_file)
